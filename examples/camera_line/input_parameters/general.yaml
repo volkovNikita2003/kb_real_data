@@ -1,0 +1,11 @@
+schema_version: 1
+
+detectors:
+  camera: {}
+  line_sensor: {}
+
+instrument:
+  detector_position: new
+  # Следующие два поля необязательны; показаны значения по умолчанию.
+  wavelength_um: 0.633
+  focal_length_um: 400000.0

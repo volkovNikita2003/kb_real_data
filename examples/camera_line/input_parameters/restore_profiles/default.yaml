@@ -1,0 +1,9 @@
+schema_version: 1
+
+detectors:
+  camera:
+    use_background: true
+  line_sensor:
+    use_background: true
+
+# Секции solver и class_slice необязательны.

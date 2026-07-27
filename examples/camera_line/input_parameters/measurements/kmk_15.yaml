@@ -1,0 +1,7 @@
+schema_version: 1
+
+expected_distribution:
+  type: gaussian
+  mean_nm: 15000.0
+  sigma_nm: 3000.0
+  particle_count: 1000000.0

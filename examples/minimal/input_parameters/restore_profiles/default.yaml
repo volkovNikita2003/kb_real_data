@@ -1,0 +1,5 @@
+schema_version: 1
+
+detectors:
+  camera: {}
+  line_sensor: {}

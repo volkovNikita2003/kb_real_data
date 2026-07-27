@@ -1,0 +1,7 @@
+schema_version: 1
+mode: automatic
+
+camera: {}
+line_sensor:
+  pinhole_position_m: 0.0002
+  signal_position_m: 0.0203

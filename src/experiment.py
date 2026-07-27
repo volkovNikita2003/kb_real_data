@@ -59,6 +59,14 @@ class RestoreProfile:
 
 
 @dataclass(frozen=True)
+class MeasurementParametersFile:
+    """Optional parameters associated with one measurement."""
+
+    measurement_name: str
+    path: Path
+
+
+@dataclass(frozen=True)
 class Experiment:
     """A structurally valid experiment and its conventional paths."""
 
@@ -153,12 +161,28 @@ class Experiment:
         return self.input_parameters_dir / "restore_profiles"
 
     @property
+    def measurement_parameters_dir(self) -> Path:
+        return self.input_parameters_dir / "measurements"
+
+    @property
     def calibration_output_dir(self) -> Path:
         return self.output_dir / "calibration"
 
     @property
     def darl_output_dir(self) -> Path:
         return self.output_dir / "darl"
+
+    @property
+    def matrix_output_dir(self) -> Path:
+        return self.darl_output_dir / "matrix"
+
+    @property
+    def quality_control_output_dir(self) -> Path:
+        return self.darl_output_dir / "quality_control"
+
+    @property
+    def expected_signals_output_root(self) -> Path:
+        return self.darl_output_dir / "expected_signals"
 
     @property
     def restore_output_root(self) -> Path:
@@ -231,6 +255,45 @@ class Experiment:
                 f"в эксперименте {self.name!r}"
             )
         return profiles[name]
+
+    def measurement_parameters_file(
+        self,
+        measurement_name: str,
+    ) -> MeasurementParametersFile | None:
+        """Return optional parameters for an existing measurement."""
+        measurement = self.measurement(measurement_name)
+        path = self.measurement_parameters_dir / f"{measurement.name}.yaml"
+        if not path.exists():
+            return None
+        if not path.is_file():
+            raise ExperimentStructureError(
+                f"Параметры измерения должны быть YAML-файлом: {path}"
+            )
+        return MeasurementParametersFile(measurement.name, path)
+
+    def expected_signal_output_dir(self, measurement_name: str) -> Path:
+        """Build the expected-signal output path for one measurement."""
+        measurement = self.measurement(measurement_name)
+        return self.expected_signals_output_root / measurement.name
+
+    def archive_path_for(self, output_path: str | Path) -> Path:
+        """Mirror an output path under ``output/archive``.
+
+        The returned path does not include a version timestamp; ``output.py``
+        appends it as the final path component when archiving.
+        """
+        resolved = Path(output_path).expanduser().resolve()
+        try:
+            relative = resolved.relative_to(self.output_dir)
+        except ValueError as error:
+            raise ExperimentStructureError(
+                f"Архивировать можно только путь внутри output/: {resolved}"
+            ) from error
+        if not relative.parts or relative.parts[0] == "archive":
+            raise ExperimentStructureError(
+                f"Нельзя архивировать output/ целиком или сам архив: {resolved}"
+            )
+        return self.archive_dir / relative
 
     def restore_output_dir(
         self,

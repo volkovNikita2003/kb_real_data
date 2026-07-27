@@ -47,6 +47,14 @@ class ExperimentTests(unittest.TestCase):
                 experiment.calibration_output_dir,
                 path / "output/calibration",
             )
+            self.assertEqual(
+                experiment.matrix_output_dir,
+                path / "output/darl/matrix",
+            )
+            self.assertEqual(
+                experiment.quality_control_output_dir,
+                path / "output/darl/quality_control",
+            )
             self.assertEqual(experiment.archive_dir, path / "output/archive")
 
     def test_measurements_are_sorted_and_exclude_calibration(self) -> None:
@@ -103,6 +111,60 @@ class ExperimentTests(unittest.TestCase):
                 experiment.restore_output_dir("default", "kmk_15"),
                 path / "output/restore/default/kmk_15",
             )
+
+    def test_expected_signal_paths_require_existing_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = create_experiment(Path(directory))
+            (path / "data/kmk_15").mkdir()
+            experiment = Experiment.open(path)
+
+            self.assertIsNone(
+                experiment.measurement_parameters_file("kmk_15")
+            )
+            self.assertEqual(
+                experiment.expected_signal_output_dir("kmk_15"),
+                path / "output/darl/expected_signals/kmk_15",
+            )
+            with self.assertRaisesRegex(
+                ExperimentStructureError,
+                "Измерение 'missing' не найдено",
+            ):
+                experiment.measurement_parameters_file("missing")
+
+    def test_archive_path_mirrors_output_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = create_experiment(Path(directory))
+            (path / "data/kmk_15").mkdir()
+            experiment = Experiment.open(path)
+
+            self.assertEqual(
+                experiment.archive_path_for(
+                    experiment.expected_signal_output_dir("kmk_15")
+                ),
+                path / "output/archive/darl/expected_signals/kmk_15",
+            )
+            self.assertEqual(
+                experiment.archive_path_for(
+                    path / "output/restore/default/kmk_15"
+                ),
+                path / "output/archive/restore/default/kmk_15",
+            )
+
+    def test_archive_path_rejects_paths_outside_results_and_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = create_experiment(Path(directory))
+            experiment = Experiment.open(path)
+
+            with self.assertRaisesRegex(
+                ExperimentStructureError,
+                "только путь внутри output",
+            ):
+                experiment.archive_path_for(path / "data")
+            with self.assertRaisesRegex(
+                ExperimentStructureError,
+                "сам архив",
+            ):
+                experiment.archive_path_for(path / "output/archive/darl")
 
     def test_restore_output_path_requires_existing_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

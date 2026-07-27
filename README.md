@@ -48,6 +48,9 @@ real_data_auto/
 ├── README.md
 ├── src/
 │   ├── preprocessing.py
+│   ├── build_matrix.py
+│   ├── quality_control.py
+│   ├── calculate_expected_signals.py
 │   ├── calc_darl.py
 │   ├── restore.py
 │   ├── run.py
@@ -68,14 +71,22 @@ real_data_auto/
         │   ├── general.yaml
         │   ├── calibration.yaml
         │   ├── darl.yaml
+        │   ├── measurements/
+        │   │   └── <имя измерения>.yaml
         │   └── restore_profiles/
         │       ├── default.yaml
         │       └── <другой профиль>.yaml
         └── output/                  # создаётся автоматически
             ├── calibration/
             ├── darl/
+            │   ├── matrix/
+            │   ├── quality_control/
+            │   └── expected_signals/
             ├── restore/
             └── archive/
+                ├── calibration/
+                ├── darl/
+                └── restore/
 ```
 
 ## Структура эксперимента
@@ -116,6 +127,8 @@ output/              # необязательная директория рез�
 - `general.yaml` — общие параметры эксперимента и оптической схемы;
 - `calibration.yaml` — параметры калибровки;
 - `darl.yaml` — параметры прямого численного моделирования;
+- `measurements/<имя>.yaml` — необязательное ожидаемое распределение
+  конкретного измерения;
 - `restore_profiles/*.yaml` — профили восстановления.
 
 ### `output/`
@@ -274,12 +287,12 @@ output/calibration/
 `result.yaml` содержит параметры камеры и линейки, вычисленные при
 калибровке и необходимые следующим этапам.
 
-### Прямое численное моделирование
+### Построение аппаратной матрицы
 
 Команда:
 
 ```bash
-python src/calc_darl.py experiments/<эксперимент>
+python src/build_matrix.py experiments/<эксперимент>
 ```
 
 Входы:
@@ -293,7 +306,7 @@ output/calibration/result.yaml
 Результаты:
 
 ```text
-output/darl/
+output/darl/matrix/
 ├── used-parameters.yaml
 ├── result.yaml
 ├── matrix.npz
@@ -304,6 +317,67 @@ output/darl/
 ```
 
 Калибровка и аппаратная матрица общие для всех измерений эксперимента.
+Построение матрицы не зависит от ожидаемых распределений измерений.
+
+### Численный контроль
+
+Команда:
+
+```bash
+python src/quality_control.py experiments/<эксперимент>
+```
+
+Этап использует готовую аппаратную матрицу, создаёт внутренние контрольные
+распределения, моделирует их сигналы, выполняет восстановление и сравнивает
+исходные и восстановленные распределения.
+
+```text
+output/darl/quality_control/
+├── used-parameters.yaml
+├── result.yaml
+├── distributions/
+├── signals/
+└── figures/
+```
+
+### Ожидаемые сигналы измерений
+
+Если существует файл
+`input_parameters/measurements/<измерение>.yaml`, для измерения можно
+рассчитать сигнал его ожидаемого распределения:
+
+```bash
+# Все измерения с заданными ожидаемыми распределениями
+python src/calculate_expected_signals.py experiments/<эксперимент>
+
+# Одно измерение
+python src/calculate_expected_signals.py experiments/<эксперимент> \
+  --measurement kmk_15
+```
+
+Результат сохраняется независимо для каждого измерения:
+
+```text
+output/darl/expected_signals/<измерение>/
+├── used-parameters.yaml
+├── result.yaml
+├── expected-distribution.txt
+├── expected-signal.txt
+└── figures/
+```
+
+Отсутствие файла при пакетном запуске означает пропуск измерения. Если
+измерение явно выбрано через `--measurement`, отсутствие файла считается
+ошибкой.
+
+### Полный расчёт DARL
+
+`calc_darl.py` является агрегирующей командой и последовательно запускает
+построение матрицы, численный контроль и расчёт доступных ожидаемых сигналов:
+
+```bash
+python src/calc_darl.py experiments/<эксперимент>
+```
 
 ### Восстановление
 
@@ -372,7 +446,9 @@ python src/run.py experiments/<эксперимент>
 ```text
 валидация
 → калибровка
-→ численное моделирование
+→ построение аппаратной матрицы
+→ численный контроль
+→ расчёт ожидаемых сигналов
 → восстановление всех пар
 ```
 
@@ -389,17 +465,38 @@ python src/run.py experiments/<эксперимент>
 python src/<скрипт>.py experiments/<эксперимент> --force
 ```
 
-Перед новым расчётом старая версия целиком переносится в `output/archive/` с
-временной меткой, например:
+Перед новым расчётом старая версия переносится в `output/archive/`. Архив
+повторяет относительную структуру рабочего результата внутри `output/`, а
+временная метка добавляется только последним каталогом:
 
 ```text
-output/archive/calibration_2026-07-24T12-30-45/
-output/archive/darl_2026-07-24T13-10-20/
-output/archive/restore_default_kmk_15_2026-07-24T14-05-17/
+output/archive/
+├── calibration/
+│   └── 2026-07-24T12-30-45.120450/
+├── darl/
+│   ├── matrix/
+│   │   └── 2026-07-24T13-10-20.318201/
+│   ├── quality_control/
+│   │   └── 2026-07-24T13-30-10.541120/
+│   └── expected_signals/
+│       └── kmk_15/
+│           └── 2026-07-24T13-45-00.682410/
+└── restore/
+    └── default/
+        └── kmk_15/
+            └── 2026-07-24T14-05-17.103482/
 ```
 
-Для восстановления архивируется только заменяемая пара «профиль × измерение».
-Её `used-parameters.yaml` переносится вместе с остальными результатами.
+Например, рабочему результату `output/restore/default/kmk_15/` всегда
+соответствует архивный путь
+`output/archive/restore/default/kmk_15/<временная метка>/`. Названия этапов,
+профилей и измерений при архивировании не изменяются.
+
+Подэтапы архивируются независимо. Для ожидаемого сигнала архивируется только
+выбранное измерение, а для восстановления — только заменяемая пара
+«профиль × измерение». Соответствующий `used-parameters.yaml` переносится
+вместе с остальными результатами. Метка содержит микросекунды, поэтому
+последовательные запуски не конфликтуют.
 
 ## Назначение модулей `src/`
 
@@ -410,7 +507,10 @@ output/archive/restore_default_kmk_15_2026-07-24T14-05-17/
 - `output.py` — создание результатов, защита от перезаписи и архивирование;
 - `errors.py` — общие типы ошибок;
 - `preprocessing.py` — калибровка;
-- `calc_darl.py` — прямое моделирование и аппаратная матрица;
+- `build_matrix.py` — построение аппаратной матрицы;
+- `quality_control.py` — численный контроль моделирования и восстановления;
+- `calculate_expected_signals.py` — сигналы ожидаемых распределений измерений;
+- `calc_darl.py` — последовательный запуск трёх подэтапов DARL;
 - `restore.py` — восстановление распределений;
 - `run.py` — последовательный запуск всего процесса.
 
@@ -468,7 +568,11 @@ YAML-файлы с безопасными именами.
 ```python
 experiment.calibration_output_dir
 experiment.darl_output_dir
+experiment.matrix_output_dir
+experiment.quality_control_output_dir
+experiment.expected_signal_output_dir("kmk_15")
 experiment.archive_dir
+experiment.archive_path_for(experiment.matrix_output_dir)
 experiment.restore_output_dir("default", "kmk_15")
 ```
 
@@ -478,11 +582,18 @@ experiment.restore_output_dir("default", "kmk_15")
 Модульные тесты запускаются из корня проекта:
 
 ```bash
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
 Варианты внутренней реализации модели и условия совместимого рефакторинга
 описаны в [docs/experiment-model.md](docs/experiment-model.md).
+
+Форматы YAML, обязательные поля и значения по умолчанию описаны в
+[docs/parameters.md](docs/parameters.md). Готовые варианты для эксперимента
+только с камерой и с камерой и линейкой находятся в `examples/`. Там же есть
+набор `minimal/` только с обязательными полями и набор `complete/` со всеми
+поддерживаемыми полями.
 
 ## Подготовленные эксперименты
 
@@ -514,14 +625,20 @@ python -m unittest discover -s tests -v
 - модель структуры эксперимента в `experiment.py`;
 - общая ошибка структуры эксперимента в `errors.py`;
 - модульные тесты модели эксперимента.
+- строгие модели и загрузка YAML в `parameters.py`;
+- применение значений по умолчанию и проверка согласованности детекторов;
+- создание полных фактически использованных параметров этапов;
+- схемы и примеры входных YAML-файлов;
+- модульные тесты параметров.
 
 Следующие модули реализуются в таком порядке:
 
-1. загрузка и проверка параметров в `parameters.py`;
-2. валидатор данных и параметров в `validate.py`;
-3. калибровка в `preprocessing.py`;
-4. численное моделирование в `calc_darl.py`;
-5. восстановление в `restore.py`;
-6. архивирование результатов в `output.py`;
-7. полный запуск обработки в `run.py`.
-8. подготовка примеров данных для git
+1. валидатор данных и параметров в `validate.py`;
+2. калибровка в `preprocessing.py`;
+3. построение аппаратной матрицы в `build_matrix.py`;
+4. численный контроль в `quality_control.py`;
+5. ожидаемые сигналы в `calculate_expected_signals.py`;
+6. агрегирующий запуск DARL в `calc_darl.py`;
+7. восстановление в `restore.py`;
+8. архивирование результатов в `output.py`;
+9. полный запуск обработки в `run.py`.

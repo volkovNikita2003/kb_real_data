@@ -1,0 +1,38 @@
+schema_version: 1
+
+detectors:
+  camera:
+    width_px: 2592
+    height_px: 1944
+  line_sensor:
+    logarithmic_radius_percent: 7.5
+
+laser:
+  angle_deg: 0.0
+  stage: 1
+  power_w: 30.0
+  polarization: parallel
+
+signal:
+  one_particle: false
+  value_type: signal
+
+particles:
+  refractive_index: 1.77
+  absorption_coefficient: 0.0
+  type: sphere
+  rectangle_aspect_ratio: 1.5
+
+medium:
+  inside_cuvette_refractive_index: 1.3333
+  cuvette_refractive_index: 1.5
+  outside_cuvette_refractive_index: 1.0
+
+particle_classes:
+  split_type: 1
+  min_diameter_nm: 100.0
+  max_diameter_nm: 3500000.0
+  mie_fraunhofer_boundary_nm: 10000.0
+  mie_class_size_nm: 300.0
+  fraunhofer_log_type: 1
+  fraunhofer_log_percent: 7.5

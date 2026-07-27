@@ -1,0 +1,18 @@
+schema_version: 1
+
+detectors:
+  camera: {}
+  line_sensor: {}
+
+particles:
+  refractive_index: 1.77
+  absorption_coefficient: 0.0
+  type: sphere
+
+medium:
+  inside_cuvette_refractive_index: 1.3333
+  cuvette_refractive_index: 1.5
+  outside_cuvette_refractive_index: 1.0
+
+# Необязательные секции laser, signal и particle_classes здесь опущены.
+# Их значения по умолчанию попадут в used-parameters.yaml.

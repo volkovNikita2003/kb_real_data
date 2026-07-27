@@ -1,0 +1,6 @@
+schema_version: 1
+
+detectors:
+  camera: {}
+instrument:
+  detector_position: old
