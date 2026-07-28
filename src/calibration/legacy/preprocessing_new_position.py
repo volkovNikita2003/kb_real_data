@@ -6,7 +6,7 @@ from pathlib import Path
 from scipy.ndimage import gaussian_filter
 from scipy.optimize import curve_fit
 
-from func import (
+from .func import (
     ExperimentConfig,
     get_signal_cam_hdr,
     find_circle,
@@ -18,24 +18,21 @@ from func import (
     calculate_fit_metrics,
     print_parameter_errors,
 )
+from .config import load_legacy_config
+from .result_adapter import save_legacy_result
 
 
 parser = argparse.ArgumentParser(description="Калибровка камеры и линейки")
 parser.add_argument(
-    "params_dir",
+    "experiment",
     type=Path,
-    help="Путь к директории с параметрами эксперимента",
+    help="Путь к директории автоматизированного эксперимента",
 )
+parser.add_argument("--output-dir", type=Path, required=True)
 args = parser.parse_args()
-params_dir = args.params_dir
-if not params_dir.is_dir():
-    parser.error(f"Директория не найдена: {params_dir}")
-
-
-
-cfg = ExperimentConfig()
-cfg.load_params(params_dir/"params-general.txt")
-cfg.load_params(params_dir/"params-preprocessing.txt")
+cfg, experiment, automated_parameters = load_legacy_config(
+    args.experiment, args.output_dir
+)
 
 PATH_CASE_DIR = cfg.dir_case
 PATH_CASE_DIR.mkdir(exist_ok=True, parents=True)
@@ -1013,3 +1010,31 @@ if is_add_lin:
         f'"shift_lin_m": {shift_lin_m_cor},\n'
         f'"pix_max_ampl": {pix_max_ampl_cor},\n'
     )
+
+line_result_values = None
+if is_add_lin:
+    line_result_values = {
+        "start_angle_deg": np.degrees(phi_left_rad),
+        "end_angle_deg": np.degrees(phi_right_rad),
+        "logarithmic_radius_percent": automated_parameters.darl.detectors.line_sensor.logarithmic_radius_percent,
+        "pixel_width_m": width_pix_x_m_cor,
+        "pixel_height_m": width_pix_y_m_cor,
+        "to_camera_coefficient": coef_lin_to_cam,
+        "shift_m": shift_lin_m_cor,
+        "peak_pixel": pix_max_ampl_cor,
+        "distance_um": x_distance_um_lin_cor,
+        "signal": signal_norm_lin,
+        "fit": lin_fit,
+    }
+save_legacy_result(
+    PATH_SAVE_PREPROCESSING_DIR,
+    diagonal_mm=diag_matrix_img_mm,
+    width_px=cfg.W,
+    height_px=cfg.H,
+    camera_shift_um=cam_shift_um_cor,
+    camera_pixel_width_m=pix_img_width_m_cor,
+    camera_distance_um=x_distance_um_cam_cor,
+    camera_signal=signal_norm_cam,
+    camera_fit=cam_fit_2,
+    line_values=line_result_values,
+)

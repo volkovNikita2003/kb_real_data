@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
+import subprocess
 import sys
 
-import numpy as np
-import yaml
-
-from calibration import calibrate, save_calibration_result
 from errors import ExperimentStructureError, OutputError, ParametersError
 from experiment import Experiment
 from output import prepare_output_directory
@@ -43,34 +41,34 @@ def run(experiment: Experiment, parameters: ExperimentParameters, *, force: bool
     with prepare_output_directory(
         experiment, experiment.calibration_output_dir, force=force
     ) as directory:
-        artifacts = calibrate(experiment, parameters, directory)
+        position = parameters.general.instrument.detector_position
+        module = (
+            "calibration.legacy.preprocessing_new_position"
+            if position == "new"
+            else "calibration.legacy.preprocessing"
+        )
+        environment = os.environ.copy()
+        environment.setdefault("MPLBACKEND", "Agg")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                module,
+                str(experiment.path),
+                "--output-dir",
+                str(directory),
+            ],
+            env=environment,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"Legacy-калибровка завершилась с кодом {completed.returncode}"
+            )
         write_used_parameters(
             directory / "used-parameters.yaml",
             parameters.effective_calibration(),
         )
-        save_calibration_result(artifacts.result, directory / "result.yaml")
-        np.savetxt(
-            directory / "camera-calibration-signal.txt",
-            artifacts.camera_signal,
-            delimiter="\t",
-            header="distance_um\tnormalized_signal\tfitted_signal",
-            comments="",
-            fmt="%.17g",
-        )
-        if artifacts.line_signal is not None:
-            np.savetxt(
-                directory / "line-calibration-signal.txt",
-                artifacts.line_signal,
-                delimiter="\t",
-                header="distance_um\tnormalized_signal\tfitted_signal",
-                comments="",
-                fmt="%.17g",
-            )
-        with (directory / "quality.yaml").open("x", encoding="utf-8") as stream:
-            yaml.safe_dump(
-                {"schema_version": 1, **artifacts.quality}, stream,
-                allow_unicode=True, sort_keys=False,
-            )
 
 
 def main(argv: list[str] | None = None) -> int:
