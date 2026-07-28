@@ -588,3 +588,14 @@ def validate_experiment(
             _validate_camera_pair(data, profile, restore, report)
             _validate_line_pair(data, profile, restore, report)
     return report.build()
+
+
+def validate_calibration_inputs(
+    experiment: Experiment,
+    parameters: ExperimentParameters,
+) -> ValidationReport:
+    """Validate only inputs consumed by the independent calibration stage."""
+    report = _ReportBuilder()
+    _validate_parameter_layout(experiment, report)
+    _validate_calibration(experiment, parameters, report)
+    return report.build()
