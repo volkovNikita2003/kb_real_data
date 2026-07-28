@@ -25,8 +25,22 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Local experiments: raw data, parameters and processing results
-experiments/
+# Local experiments are not versioned by default.  The reference experiment
+# is an exception: keep its input parameters in Git, but not raw data or
+# generated output.
+experiments/*
+!experiments/test_17_07_26_kmk_15/
+experiments/test_17_07_26_kmk_15/*
+!experiments/test_17_07_26_kmk_15/input_parameters/
+!experiments/test_17_07_26_kmk_15/input_parameters/**
+
+# The legacy reference calculation contains large copies of camera data.
+# They are kept outside regular Git; scripts, textual parameters and compact
+# numerical baselines in the other ref directories remain trackable.
+ref/test_17_07_26_kmk_15/kmk_15/сигнал/
+ref/test_17_07_26_kmk_15/kmk_15/фон/
+ref/test_17_07_26_kmk_15/kmk_15/юстировка/
+ref/test_17_07_26_kmk_15/**/*.png
 
 # Temporary files and logs
 *.log

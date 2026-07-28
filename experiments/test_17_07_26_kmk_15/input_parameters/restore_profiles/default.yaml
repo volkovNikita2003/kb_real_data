@@ -1,0 +1,15 @@
+schema_version: 1
+detectors:
+  camera:
+    use_background: true
+  line_sensor:
+    use_background: true
+solver:
+  type: tikhonov_nnls
+  regularization_order: 1
+  regularization_alpha: best
+  use_chahine: true
+  use_concentration_correction: true
+class_slice:
+  drop_first: 10
+  drop_last: null
