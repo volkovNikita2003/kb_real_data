@@ -9,7 +9,12 @@ from typing import Iterable, Literal, Sequence
 
 from errors import ExperimentStructureError, ParametersError
 from experiment import Experiment, Measurement, RestoreProfile, validate_safe_name
-from parameters import ExperimentParameters, RestoreParameters, load_measurement_parameters
+from parameters import (
+    CalibrationStageParameters,
+    ExperimentParameters,
+    RestoreParameters,
+    load_measurement_parameters,
+)
 
 
 EXPOSURE_PATTERN = re.compile(r"^[1-9][0-9]*$", re.ASCII)
@@ -255,7 +260,7 @@ def _validate_parameter_layout(
 
 def _validate_calibration(
     experiment: Experiment,
-    parameters: ExperimentParameters,
+    parameters: CalibrationStageParameters | ExperimentParameters,
     report: _ReportBuilder,
 ) -> None:
     _check_allowed_entries(
@@ -592,7 +597,7 @@ def validate_experiment(
 
 def validate_calibration_inputs(
     experiment: Experiment,
-    parameters: ExperimentParameters,
+    parameters: CalibrationStageParameters,
 ) -> ValidationReport:
     """Validate only inputs consumed by the independent calibration stage."""
     report = _ReportBuilder()

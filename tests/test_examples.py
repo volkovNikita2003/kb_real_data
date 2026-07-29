@@ -28,8 +28,8 @@ class ParameterExamplesTests(unittest.TestCase):
         restore = load_restore_parameters(root / "restore_profiles/default.yaml")
 
         self.assertEqual(general.detectors.names(), {"camera", "line_sensor"})
-        self.assertEqual(calibration.line_sensor.pixel_count, 3643)
-        self.assertEqual(darl.detectors.camera.width_px, 2592)
+        self.assertEqual(general.detectors.line_sensor.pixel_count, 3643)
+        self.assertEqual(general.detectors.camera.width_px, 2592)
         self.assertTrue(restore.detectors.camera.use_background)
         self.assertFalse((root / "measurements").exists())
 

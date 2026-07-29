@@ -94,27 +94,15 @@ def _number(value: Any, path: str, *, positive: bool = False, non_negative: bool
     return result
 
 
-def _positive_integer(value: Any, path: str) -> int:
-    if type(value) is not int:
-        raise CalibrationResultError(f"{path}: expected an integer")
-    if value <= 0:
-        raise CalibrationResultError(f"{path}: integer must be positive")
-    return value
-
-
 @dataclass(frozen=True)
 class CameraCalibrationResult:
     matrix_diagonal_mm: float
-    width_px: int
-    height_px: int
     x_shift_m: float
     y_shift_m: float
     pixel_width_m: float
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "matrix_diagonal_mm", _number(self.matrix_diagonal_mm, "camera.matrix_diagonal_mm", positive=True))
-        object.__setattr__(self, "width_px", _positive_integer(self.width_px, "camera.width_px"))
-        object.__setattr__(self, "height_px", _positive_integer(self.height_px, "camera.height_px"))
         object.__setattr__(self, "x_shift_m", _number(self.x_shift_m, "camera.x_shift_m"))
         object.__setattr__(self, "y_shift_m", _number(self.y_shift_m, "camera.y_shift_m"))
         object.__setattr__(self, "pixel_width_m", _number(self.pixel_width_m, "camera.pixel_width_m", positive=True))
@@ -124,7 +112,6 @@ class CameraCalibrationResult:
 class LineSensorCalibrationResult:
     start_angle_deg: float
     end_angle_deg: float
-    logarithmic_radius_percent: float
     pixel_width_m: float
     pixel_height_m: float
     to_camera_coefficient: float
@@ -134,12 +121,7 @@ class LineSensorCalibrationResult:
     def __post_init__(self) -> None:
         for name in ("start_angle_deg", "end_angle_deg", "shift_m"):
             object.__setattr__(self, name, _number(getattr(self, name), f"line_sensor.{name}"))
-        for name in (
-            "logarithmic_radius_percent",
-            "pixel_width_m",
-            "pixel_height_m",
-            "to_camera_coefficient",
-        ):
+        for name in ("pixel_width_m", "pixel_height_m", "to_camera_coefficient"):
             object.__setattr__(self, name, _number(getattr(self, name), f"line_sensor.{name}", positive=True))
         object.__setattr__(self, "peak_pixel", _number(self.peak_pixel, "line_sensor.peak_pixel", non_negative=True))
         if self.start_angle_deg >= self.end_angle_deg:
@@ -187,11 +169,11 @@ class CalibrationResult(Mapping[str, Any]):
 
 
 _CAMERA_FIELDS = frozenset({
-    "matrix_diagonal_mm", "width_px", "height_px", "x_shift_m", "y_shift_m", "pixel_width_m",
+    "matrix_diagonal_mm", "x_shift_m", "y_shift_m", "pixel_width_m",
 })
 _LINE_FIELDS = frozenset({
-    "start_angle_deg", "end_angle_deg", "logarithmic_radius_percent", "pixel_width_m",
-    "pixel_height_m", "to_camera_coefficient", "shift_m", "peak_pixel",
+    "start_angle_deg", "end_angle_deg", "pixel_width_m", "pixel_height_m",
+    "to_camera_coefficient", "shift_m", "peak_pixel",
 })
 
 

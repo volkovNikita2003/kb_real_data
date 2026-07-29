@@ -23,15 +23,12 @@ python src/preprocessing.py experiments/<эксперимент>
 schema_version: 1
 camera:
   matrix_diagonal_mm: 6.19
-  width_px: 2592
-  height_px: 1944
   x_shift_m: 0.00017
   y_shift_m: 0.000049
   pixel_width_m: 0.00000191
 line_sensor:
   start_angle_deg: 0.88
   end_angle_deg: 5.09
-  logarithmic_radius_percent: 7.5
   pixel_width_m: 0.0000081
   pixel_height_m: 0.000202
   to_camera_coefficient: 0.31
@@ -42,6 +39,10 @@ line_sensor:
 Секция `line_sensor` отсутствует в эксперименте только с камерой. Все поля
 проверяются строго; неизвестные поля, повторяющиеся YAML-ключи, `NaN` и
 бесконечные значения отклоняются.
+Физические размеры и число пикселей детекторов хранятся в `general.yaml`, а
+`logarithmic_radius_percent` — в `darl.yaml`; они не дублируются в результате
+калибровки. Размеры пикселя линейки в результате являются уже
+скорректированными калибровкой значениями, поэтому остаются в `result.yaml`.
 
 Файлы `camera-calibration-signal.txt` и `line-calibration-signal.txt` содержат
 три столбца: расстояние в микрометрах, нормированный сигнал и аналитический

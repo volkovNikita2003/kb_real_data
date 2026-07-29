@@ -14,6 +14,7 @@ sys.path.insert(0, str(SRC_DIR))
 from errors import ParametersError
 from experiment import Experiment
 from parameters import (
+    CalibrationStageParameters,
     ExperimentParameters,
     load_calibration_parameters,
     load_darl_parameters,
@@ -186,8 +187,6 @@ class DarlParametersTests(unittest.TestCase):
 
             self.assertEqual(result.particle_classes.min_diameter_nm, 100.0)
             self.assertEqual(result.particle_classes.max_diameter_nm, 3_500_000.0)
-            self.assertEqual(result.detectors.camera.width_px, 2592)
-            self.assertEqual(result.detectors.camera.height_px, 1944)
             self.assertEqual(result.laser.power_w, 30.0)
             self.assertFalse(result.signal.one_particle)
 
@@ -256,6 +255,19 @@ class CalibrationParametersTests(unittest.TestCase):
 
 
 class EffectiveParametersTests(unittest.TestCase):
+    def test_calibration_stage_does_not_read_darl_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            experiment.darl_parameters_file.write_text(
+                "this is not valid DARL YAML: [",
+                encoding="utf-8",
+            )
+
+            parameters = CalibrationStageParameters.load(experiment)
+
+            self.assertEqual(parameters.general.detectors.names(), {"camera"})
+            self.assertIsNotNone(parameters.calibration.camera)
+
     def test_detector_sets_must_match(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             experiment = create_camera_experiment(Path(directory))

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields, is_dataclass
 import math
 from pathlib import Path
-from typing import Any, Mapping, TypeVar
+from typing import Any, Mapping
 
 import yaml
 from yaml.constructor import ConstructorError
@@ -19,7 +19,6 @@ from experiment import Experiment, MeasurementParametersFile, RestoreProfile
 
 
 SCHEMA_VERSION = 1
-T = TypeVar("T")
 
 
 class UniqueKeySafeLoader(yaml.SafeLoader):
@@ -174,19 +173,24 @@ class InstrumentParameters:
 
 
 @dataclass(frozen=True)
-class CameraPresence:
-    pass
+class CameraDetectorParameters:
+    width_px: int = 2592
+    height_px: int = 1944
+    pixel_width_m: float = 1.8965517241379312e-6
+    pixel_height_m: float = 1.8965517241379312e-6
 
 
 @dataclass(frozen=True)
-class LineSensorPresence:
-    pass
+class LineSensorDetectorParameters:
+    pixel_count: int = 3643
+    pixel_width_m: float = 8e-6
+    pixel_height_m: float = 0.0002
 
 
 @dataclass(frozen=True)
 class ExperimentDetectors:
-    camera: CameraPresence | None = None
-    line_sensor: LineSensorPresence | None = None
+    camera: CameraDetectorParameters | None = None
+    line_sensor: LineSensorDetectorParameters | None = None
 
     def names(self) -> frozenset[str]:
         return frozenset(
@@ -218,15 +222,41 @@ def load_general_parameters(path: str | Path) -> GeneralParameters:
         optional={"camera", "line_sensor"},
     )
 
-    def presence(name: str, cls: type[T]) -> T | None:
-        if name not in detector_data:
-            return None
-        _fields(detector_data[name], f"{source.name}.detectors.{name}")
-        return cls()
+    camera = None
+    if "camera" in detector_data:
+        path = f"{source.name}.detectors.camera"
+        data = _fields(
+            detector_data["camera"], path,
+            optional={"width_px", "height_px", "pixel_width_m", "pixel_height_m"},
+        )
+        camera = CameraDetectorParameters(
+            width_px=_integer(data.get("width_px", 2592), f"{path}.width_px", positive=True),
+            height_px=_integer(data.get("height_px", 1944), f"{path}.height_px", positive=True),
+            pixel_width_m=_number(
+                data.get("pixel_width_m", 1.8965517241379312e-6),
+                f"{path}.pixel_width_m", positive=True,
+            ),
+            pixel_height_m=_number(
+                data.get("pixel_height_m", 1.8965517241379312e-6),
+                f"{path}.pixel_height_m", positive=True,
+            ),
+        )
+    line_sensor = None
+    if "line_sensor" in detector_data:
+        path = f"{source.name}.detectors.line_sensor"
+        data = _fields(
+            detector_data["line_sensor"], path,
+            optional={"pixel_count", "pixel_width_m", "pixel_height_m"},
+        )
+        line_sensor = LineSensorDetectorParameters(
+            pixel_count=_integer(data.get("pixel_count", 3643), f"{path}.pixel_count", positive=True),
+            pixel_width_m=_number(data.get("pixel_width_m", 8e-6), f"{path}.pixel_width_m", positive=True),
+            pixel_height_m=_number(data.get("pixel_height_m", 0.0002), f"{path}.pixel_height_m", positive=True),
+        )
 
     detectors = ExperimentDetectors(
-        camera=presence("camera", CameraPresence),
-        line_sensor=presence("line_sensor", LineSensorPresence),
+        camera=camera,
+        line_sensor=line_sensor,
     )
     if not detectors.names():
         raise ParametersError(
@@ -260,10 +290,20 @@ def load_general_parameters(path: str | Path) -> GeneralParameters:
 
 
 @dataclass(frozen=True)
+class CalibrationHdrParameters:
+    mode: str = "l2h"
+    difference_mode: str = "after_hdr"
+    background_level: float = 12.0
+    low_threshold: float = 10.0
+    top_threshold: float = 240.0
+
+
+@dataclass(frozen=True)
 class AutomaticCameraCalibration:
     pinhole_diameter_um: float = 200.0
     gaussian_sigma_px: float = 20.0
     correct_pixel_size: bool = True
+    hdr: CalibrationHdrParameters = field(default_factory=CalibrationHdrParameters)
 
 
 @dataclass(frozen=True)
@@ -273,9 +313,6 @@ class AutomaticLineSensorCalibration:
     pinhole_diameter_um: float = 200.0
     gaussian_sigma_px: float = 3.0
     time_offset_us: float = 2.0
-    pixel_count: int = 3643
-    pixel_width_um: float = 8.0
-    pixel_height_um: float = 200.0
 
 
 @dataclass(frozen=True)
@@ -306,8 +343,44 @@ def load_calibration_parameters(path: str | Path) -> CalibrationParameters:
                 "pinhole_diameter_um",
                 "gaussian_sigma_px",
                 "correct_pixel_size",
+                "hdr",
             },
         )
+        hdr_data = _fields(
+            data.get("hdr", {}),
+            f"{source.name}.camera.hdr",
+            optional={
+                "mode", "difference_mode", "background_level",
+                "low_threshold", "top_threshold",
+            },
+        )
+        hdr = CalibrationHdrParameters(
+            mode=_choice(
+                hdr_data.get("mode", "l2h"),
+                f"{source.name}.camera.hdr.mode", {"l2h", "l2h_longest"},
+            ),
+            difference_mode=_choice(
+                hdr_data.get("difference_mode", "after_hdr"),
+                f"{source.name}.camera.hdr.difference_mode",
+                {"after_hdr", "per_exposure"},
+            ),
+            background_level=_number(
+                hdr_data.get("background_level", 12.0),
+                f"{source.name}.camera.hdr.background_level", non_negative=True,
+            ),
+            low_threshold=_number(
+                hdr_data.get("low_threshold", 10.0),
+                f"{source.name}.camera.hdr.low_threshold", non_negative=True,
+            ),
+            top_threshold=_number(
+                hdr_data.get("top_threshold", 240.0),
+                f"{source.name}.camera.hdr.top_threshold", positive=True,
+            ),
+        )
+        if hdr.low_threshold > hdr.top_threshold:
+            raise ParametersError(
+                f"{source.name}.camera.hdr: low_threshold не может быть больше top_threshold"
+            )
         camera = AutomaticCameraCalibration(
             pinhole_diameter_um=_number(
                 data.get("pinhole_diameter_um", 200.0),
@@ -323,6 +396,7 @@ def load_calibration_parameters(path: str | Path) -> CalibrationParameters:
                 data.get("correct_pixel_size", True),
                 f"{source.name}.camera.correct_pixel_size",
             ),
+            hdr=hdr,
         )
 
     line_sensor = None
@@ -335,9 +409,6 @@ def load_calibration_parameters(path: str | Path) -> CalibrationParameters:
                 "pinhole_diameter_um",
                 "gaussian_sigma_px",
                 "time_offset_us",
-                "pixel_count",
-                "pixel_width_um",
-                "pixel_height_um",
             },
         )
         line_sensor = AutomaticLineSensorCalibration(
@@ -364,29 +435,13 @@ def load_calibration_parameters(path: str | Path) -> CalibrationParameters:
                 f"{source.name}.line_sensor.time_offset_us",
                 non_negative=True,
             ),
-            pixel_count=_integer(
-                data.get("pixel_count", 3643),
-                f"{source.name}.line_sensor.pixel_count",
-                positive=True,
-            ),
-            pixel_width_um=_number(
-                data.get("pixel_width_um", 8.0),
-                f"{source.name}.line_sensor.pixel_width_um",
-                positive=True,
-            ),
-            pixel_height_um=_number(
-                data.get("pixel_height_um", 200.0),
-                f"{source.name}.line_sensor.pixel_height_um",
-                positive=True,
-            ),
         )
     return CalibrationParameters(version, mode, camera, line_sensor)
 
 
 @dataclass(frozen=True)
 class DarlCamera:
-    width_px: int = 2592
-    height_px: int = 1944
+    pass
 
 
 @dataclass(frozen=True)
@@ -484,23 +539,8 @@ def _load_darl_detectors(value: Any, path: str) -> DarlDetectors:
     root = _fields(value, path, optional={"camera", "line_sensor"})
     camera = None
     if "camera" in root:
-        data = _fields(
-            root["camera"],
-            f"{path}.camera",
-            optional={"width_px", "height_px"},
-        )
-        camera = DarlCamera(
-            _integer(
-                data.get("width_px", 2592),
-                f"{path}.camera.width_px",
-                positive=True,
-            ),
-            _integer(
-                data.get("height_px", 1944),
-                f"{path}.camera.height_px",
-                positive=True,
-            ),
-        )
+        _fields(root["camera"], f"{path}.camera")
+        camera = DarlCamera()
     line_sensor = None
     if "line_sensor" in root:
         data = _fields(
@@ -883,6 +923,43 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
 
 
 @dataclass(frozen=True)
+class CalibrationStageParameters:
+    """Parameters consumed by calibration, without any DARL dependency."""
+
+    general: GeneralParameters
+    calibration: CalibrationParameters
+
+    @classmethod
+    def load(cls, experiment: Experiment) -> "CalibrationStageParameters":
+        result = cls(
+            load_general_parameters(experiment.general_parameters_file),
+            load_calibration_parameters(experiment.calibration_parameters_file),
+        )
+        result.validate_consistency()
+        return result
+
+    def validate_consistency(self) -> None:
+        expected = self.general.detectors.names()
+        actual = frozenset(
+            name for name in ("camera", "line_sensor")
+            if getattr(self.calibration, name) is not None
+        )
+        if actual != expected:
+            raise ParametersError(
+                "calibration.yaml: набор секций детекторов должен совпадать "
+                f"с general.yaml; ожидалось {sorted(expected)}, "
+                f"получено {sorted(actual)}"
+            )
+
+    def effective_parameters(self) -> dict[str, Any]:
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "general": _plain(self.general),
+            "calibration": _plain(self.calibration),
+        }
+
+
+@dataclass(frozen=True)
 class ExperimentParameters:
     general: GeneralParameters
     calibration: CalibrationParameters
@@ -890,9 +967,10 @@ class ExperimentParameters:
 
     @classmethod
     def load(cls, experiment: Experiment) -> "ExperimentParameters":
+        calibration_stage = CalibrationStageParameters.load(experiment)
         result = cls(
-            load_general_parameters(experiment.general_parameters_file),
-            load_calibration_parameters(experiment.calibration_parameters_file),
+            calibration_stage.general,
+            calibration_stage.calibration,
             load_darl_parameters(experiment.darl_parameters_file),
         )
         result.validate_consistency()
@@ -930,11 +1008,9 @@ class ExperimentParameters:
         return result
 
     def effective_calibration(self) -> dict[str, Any]:
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "general": _plain(self.general),
-            "calibration": _plain(self.calibration),
-        }
+        return CalibrationStageParameters(
+            self.general, self.calibration
+        ).effective_parameters()
 
     def load_measurement(
         self,

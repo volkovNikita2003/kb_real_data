@@ -6,6 +6,12 @@ camera:
   pinhole_diameter_um: 200.0
   gaussian_sigma_px: 20.0
   correct_pixel_size: true
+  hdr:
+    mode: l2h
+    difference_mode: after_hdr
+    background_level: 12.0
+    low_threshold: 10.0
+    top_threshold: 240.0
 
 # Поля pinhole_position_m и signal_position_m обязательны
 # для остальных показаны значения по умолчанию.
@@ -13,8 +19,5 @@ line_sensor:
   pinhole_diameter_um: 200.0
   gaussian_sigma_px: 3.0
   time_offset_us: 2.0
-  pixel_count: 3643
-  pixel_width_um: 8.0
-  pixel_height_um: 200.0
   pinhole_position_m: 0.0002
   signal_position_m: 0.0203

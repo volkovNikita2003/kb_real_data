@@ -1,9 +1,7 @@
 schema_version: 1
 
 detectors:
-  camera:
-    width_px: 2592
-    height_px: 1944
+  camera: {}
   line_sensor:
     logarithmic_radius_percent: 7.5
 

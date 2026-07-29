@@ -31,8 +31,15 @@
 ```yaml
 schema_version: 1
 detectors:
-  camera: {}
-  line_sensor: {}
+  camera:
+    width_px: 2592
+    height_px: 1944
+    pixel_width_m: 0.0000018965517241379312
+    pixel_height_m: 0.0000018965517241379312
+  line_sensor:
+    pixel_count: 3643
+    pixel_width_m: 0.000008
+    pixel_height_m: 0.0002
 instrument:
   detector_position: new
   wavelength_um: 0.633
@@ -43,6 +50,10 @@ instrument:
 калибровки. Для экспериментов до изменения положения используется `old`, для
 положения от 17.07.26 — `new`. Длина волны и фокусное расстояние необязательны;
 показанные значения являются значениями по умолчанию.
+Все поля физических параметров детекторов необязательны; в примере показаны
+их значения по умолчанию. Размеры задаются непосредственно в метрах. Это
+исключает изменение двоичного значения числа из-за промежуточного пересчёта
+из микрометров.
 
 ## `calibration.yaml`
 
@@ -51,7 +62,13 @@ instrument:
 ```yaml
 schema_version: 1
 mode: automatic
-camera: {}
+camera:
+  hdr:
+    mode: l2h
+    difference_mode: after_hdr
+    background_level: 12.0
+    low_threshold: 10.0
+    top_threshold: 240.0
 line_sensor:
   pinhole_position_m: 0.0002
   signal_position_m: 0.0203
@@ -66,10 +83,12 @@ line_sensor:
 | `pinhole_diameter_um` | 200.0 | 200.0 |
 | `gaussian_sigma_px` | 20.0 | 3.0 |
 | `correct_pixel_size` | `true` | — |
+| `hdr.mode` | `l2h` | — |
+| `hdr.difference_mode` | `after_hdr` | — |
+| `hdr.background_level` | 12.0 | — |
+| `hdr.low_threshold` | 10.0 | — |
+| `hdr.top_threshold` | 240.0 | — |
 | `time_offset_us` | — | 2.0 |
-| `pixel_count` | — | 3643 |
-| `pixel_width_um` | — | 8.0 |
-| `pixel_height_um` | — | 200.0 |
 
 Режимы ручной калибровки и автоматической калибровки с поправками оставлены
 для следующей версии схемы.
@@ -82,9 +101,9 @@ line_sensor:
 - коэффициенты преломления и поглощения частиц и тип частиц;
 - три коэффициента преломления среды.
 
-Поля детекторов необязательны. Для камеры `width_px` по умолчанию равен 2592,
-а `height_px` — 1944. Для линейки `logarithmic_radius_percent` по умолчанию
-равен 7.5. Секции присутствующих детекторов должны быть указаны, а их набор
+Секция камеры не имеет собственных полей. Для линейки
+`logarithmic_radius_percent` по умолчанию равен 7.5. Секции присутствующих
+детекторов должны быть указаны, а их набор
 должен совпадать с `general.yaml`.
 
 Поддерживаемые типы частиц: `sphere`, `rectangle`. Для прямоугольной частицы
@@ -177,8 +196,11 @@ class_slice:
 
 ## Фактически использованные параметры
 
-`ExperimentParameters` загружает три общих файла и проверяет согласованность
-детекторов. Методы `effective_calibration()`, `effective_matrix()`,
+`CalibrationStageParameters` загружает только `general.yaml` и
+`calibration.yaml`, поэтому калибровка не зависит от наличия и содержимого
+`darl.yaml`. `ExperimentParameters` дополнительно загружает `darl.yaml` для
+следующих этапов и проверяет согласованность детекторов. Методы
+`effective_calibration()`, `effective_matrix()`,
 `effective_quality_control()`, `effective_expected_signal()` и
 `effective_restore()` создают полные словари соответствующих запусков. Они
 включают значения по умолчанию и результаты предыдущих этапов.

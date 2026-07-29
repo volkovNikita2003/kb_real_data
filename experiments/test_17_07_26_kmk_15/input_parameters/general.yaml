@@ -1,7 +1,14 @@
 schema_version: 1
 detectors:
-  camera: {}
-  line_sensor: {}
+  camera:
+    width_px: 2592
+    height_px: 1944
+    pixel_width_m: 0.0000018965517241379312
+    pixel_height_m: 0.0000018965517241379312
+  line_sensor:
+    pixel_count: 3643
+    pixel_width_m: 0.000008
+    pixel_height_m: 0.0002
 instrument:
   detector_position: new
   wavelength_um: 0.633

@@ -19,8 +19,6 @@ def save_legacy_result(
     directory: Path,
     *,
     diagonal_mm: float,
-    width_px: int,
-    height_px: int,
     camera_shift_um,
     camera_pixel_width_m: float,
     camera_distance_um,
@@ -33,7 +31,6 @@ def save_legacy_result(
         line_result = LineSensorCalibrationResult(
             start_angle_deg=float(line_values["start_angle_deg"]),
             end_angle_deg=float(line_values["end_angle_deg"]),
-            logarithmic_radius_percent=float(line_values["logarithmic_radius_percent"]),
             pixel_width_m=float(line_values["pixel_width_m"]),
             pixel_height_m=float(line_values["pixel_height_m"]),
             to_camera_coefficient=float(line_values["to_camera_coefficient"]),
@@ -44,8 +41,6 @@ def save_legacy_result(
         RESULT_SCHEMA_VERSION,
         CameraCalibrationResult(
             matrix_diagonal_mm=float(diagonal_mm),
-            width_px=int(width_px),
-            height_px=int(height_px),
             x_shift_m=float(camera_shift_um[0]) * 1e-6,
             y_shift_m=float(camera_shift_um[1]) * 1e-6,
             pixel_width_m=float(camera_pixel_width_m),

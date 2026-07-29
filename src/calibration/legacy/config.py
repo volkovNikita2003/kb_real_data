@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from experiment import Experiment
-from parameters import ExperimentParameters
+from parameters import CalibrationStageParameters
 from validation import parse_exposure_filename
 
 from .func import ExperimentConfig
@@ -14,11 +14,11 @@ from .func import ExperimentConfig
 def load_legacy_config(
     experiment_path: str | Path,
     output_directory: str | Path,
-) -> tuple[ExperimentConfig, Experiment, ExperimentParameters]:
+) -> tuple[ExperimentConfig, Experiment, CalibrationStageParameters]:
     experiment = Experiment.open(experiment_path)
-    parameters = ExperimentParameters.load(experiment)
+    parameters = CalibrationStageParameters.load(experiment)
     camera = parameters.calibration.camera
-    camera_geometry = parameters.darl.detectors.camera
+    camera_geometry = parameters.general.detectors.camera
     if camera is None or camera_geometry is None:
         raise ValueError("Legacy-калибровка требует камеру")
 
@@ -34,14 +34,12 @@ def load_legacy_config(
     cfg.calib_cam_gaussian_sigma = camera.gaussian_sigma_px
     cfg.calib_cam_corrected = camera.correct_pixel_size
 
-    # These values reproduce params-general.txt of the reference calculation.
-    # They remain legacy defaults until the shared HDR parameter model is
-    # introduced; the numerical code below is intentionally unchanged.
-    cfg.cam_hdr_diff_mode = "after_hdr"
-    cfg.cam_hdr_mode = "l2h"
-    cfg.cam_hdr_low_thr = 10.0
-    cfg.cam_hdr_back_level = 12.0
-    cfg.cam_hdr_top_thr = 240.0
+    cfg.cam_pixel_width_m = camera_geometry.pixel_width_m
+    cfg.cam_hdr_diff_mode = camera.hdr.difference_mode
+    cfg.cam_hdr_mode = camera.hdr.mode
+    cfg.cam_hdr_low_thr = camera.hdr.low_threshold
+    cfg.cam_hdr_back_level = camera.hdr.background_level
+    cfg.cam_hdr_top_thr = camera.hdr.top_threshold
 
     line = parameters.calibration.line_sensor
     if line is not None:
@@ -56,8 +54,11 @@ def load_legacy_config(
         cfg.calib_lin_position_signal_m = line.signal_position_m
         cfg.calib_lin_gaussian_sigma = line.gaussian_sigma_px
         cfg.lin_time_add = line.time_offset_us
-        cfg.num_pix_lin = line.pixel_count
-        cfg.width_pix_x_m = line.pixel_width_um * 1e-6
-        cfg.width_pix_y_m = 0.0002
+        line_geometry = parameters.general.detectors.line_sensor
+        if line_geometry is None:
+            raise ValueError("В general.yaml отсутствуют параметры линейки")
+        cfg.num_pix_lin = line_geometry.pixel_count
+        cfg.width_pix_x_m = line_geometry.pixel_width_m
+        cfg.width_pix_y_m = line_geometry.pixel_height_m
 
     return cfg, experiment, parameters

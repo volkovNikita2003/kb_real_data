@@ -114,7 +114,7 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
               output_directory: Path) -> CalibrationArtifacts:
     """Calibrate configured detectors and write diagnostic artifacts."""
     camera_parameters = parameters.calibration.camera
-    camera_geometry = parameters.darl.detectors.camera
+    camera_geometry = parameters.general.detectors.camera
     if camera_parameters is None or camera_geometry is None:
         raise ValueError("Автоматическая калибровка требует камеру")
 
@@ -188,8 +188,6 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
 
     camera_result = CameraCalibrationResult(
         matrix_diagonal_mm=float(corrected_pixel * np.hypot(*shape[::-1]) * 1e3),
-        width_px=camera_geometry.width_px,
-        height_px=camera_geometry.height_px,
         x_shift_m=float(corrected_shift[0]),
         y_shift_m=float(corrected_shift[1]),
         pixel_width_m=float(corrected_pixel),
@@ -205,7 +203,7 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
     line_artifact: np.ndarray | None = None
     line_result: LineSensorCalibrationResult | None = None
     line_parameters = parameters.calibration.line_sensor
-    line_geometry = parameters.darl.detectors.line_sensor
+    line_geometry = parameters.general.detectors.line_sensor
     if line_parameters is not None and line_geometry is not None:
         line_files = list(experiment.calibration_line_dir.glob("*.txt"))
         if len(line_files) != 1:
@@ -214,8 +212,8 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
         pixels, amplitude = read_line_signal(line_files[0])
         signal = amplitude - amplitude.min()
         filtered_line = gaussian_filter(signal, sigma=line_parameters.gaussian_sigma_px)
-        width_m = line_parameters.pixel_width_um * 1e-6
-        height_m = line_parameters.pixel_height_um * 1e-6
+        width_m = line_geometry.pixel_width_m
+        height_m = line_geometry.pixel_height_m
         normalized_line = filtered_line / exposure / width_m / height_m
         peak = int(np.argmax(filtered_line))
         start, stop = peak + 150, peak + 250
@@ -226,7 +224,7 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
         pinhole_line_um = _pinhole_diameter(
             minimum_width, wavelength_um * 1e-6, focal_length_um * 1e-6
         ) * 1e6
-        x_line_um = (pixels - peak) * line_parameters.pixel_width_um
+        x_line_um = (pixels - peak) * (line_geometry.pixel_width_m * 1e6)
         model_line = lambda x, amplitude_value, diameter, gap: _airy(
             x, amplitude_value, diameter, gap, wavelength_um, focal_length_um
         )
@@ -241,7 +239,7 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
         corrected_line_shift = line_scale * (
             line_parameters.signal_position_m - line_parameters.pinhole_position_m
         )
-        corrected_peak = peak + line_fit_parameters[2] / line_parameters.pixel_width_um
+        corrected_peak = peak + line_fit_parameters[2] / (line_geometry.pixel_width_m * 1e6)
         final_line_parameters, _ = curve_fit(
             model_line, corrected_line_x, normalized_line,
             p0=[float(normalized_line.max()), pinhole_line_um, 0.0],
@@ -255,7 +253,6 @@ def calibrate(experiment: Experiment, parameters: ExperimentParameters,
         line_result = LineSensorCalibrationResult(
             start_angle_deg=float(angles.min()),
             end_angle_deg=float(angles.max()),
-            logarithmic_radius_percent=line_geometry.logarithmic_radius_percent,
             pixel_width_m=float(corrected_line_width),
             pixel_height_m=float(corrected_line_height),
             to_camera_coefficient=float(corrected_parameters[0] / final_line_parameters[0]),

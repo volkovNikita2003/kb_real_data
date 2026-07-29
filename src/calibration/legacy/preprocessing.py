@@ -1014,7 +1014,6 @@ if is_add_lin:
     line_result_values = {
         "start_angle_deg": np.degrees(phi_left_rad),
         "end_angle_deg": np.degrees(phi_right_rad),
-        "logarithmic_radius_percent": automated_parameters.darl.detectors.line_sensor.logarithmic_radius_percent,
         "pixel_width_m": width_pix_x_m_cor,
         "pixel_height_m": width_pix_y_m_cor,
         "to_camera_coefficient": coef_lin_to_cam,
@@ -1027,8 +1026,6 @@ if is_add_lin:
 save_legacy_result(
     PATH_SAVE_PREPROCESSING_DIR,
     diagonal_mm=diag_matrix_img_mm,
-    width_px=cfg.W,
-    height_px=cfg.H,
     camera_shift_um=cam_shift_um_cor,
     camera_pixel_width_m=pix_img_width_m_cor,
     camera_distance_um=x_distance_um_cam_cor,

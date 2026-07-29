@@ -11,7 +11,7 @@ import sys
 from errors import ExperimentStructureError, OutputError, ParametersError
 from experiment import Experiment
 from output import prepare_output_directory
-from parameters import ExperimentParameters, write_used_parameters
+from parameters import CalibrationStageParameters, write_used_parameters
 from validate import format_report
 from validation import validate_calibration_inputs
 
@@ -51,7 +51,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(experiment: Experiment, parameters: ExperimentParameters, *, force: bool = False) -> None:
+def run(experiment: Experiment, parameters: CalibrationStageParameters, *, force: bool = False) -> None:
     with prepare_output_directory(
         experiment, experiment.calibration_output_dir, force=force
     ) as directory:
@@ -79,7 +79,7 @@ def run(experiment: Experiment, parameters: ExperimentParameters, *, force: bool
             )
         write_used_parameters(
             directory / "used-parameters.yaml",
-            parameters.effective_calibration(),
+            parameters.effective_parameters(),
         )
 
 
@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         experiment = Experiment.open(args.experiment)
-        parameters = ExperimentParameters.load(experiment)
+        parameters = CalibrationStageParameters.load(experiment)
         report = validate_calibration_inputs(experiment, parameters)
         print(format_report(report, show_warnings=not args.no_warnings))
         if report.errors or (args.warnings_as_errors and report.warnings):

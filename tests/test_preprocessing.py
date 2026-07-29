@@ -28,7 +28,7 @@ class PreprocessingWarningCliTests(unittest.TestCase):
         run_mock = Mock()
         with (
             patch.object(preprocessing.Experiment, "open", return_value=self.experiment),
-            patch.object(preprocessing.ExperimentParameters, "load", return_value=self.parameters),
+            patch.object(preprocessing.CalibrationStageParameters, "load", return_value=self.parameters),
             patch.object(preprocessing, "validate_calibration_inputs", return_value=self.report),
             patch.object(preprocessing, "run", run_mock),
             redirect_stdout(StringIO()) as output,
