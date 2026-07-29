@@ -301,6 +301,32 @@ class EffectiveParametersTests(unittest.TestCase):
             self.assertNotIn("line_sensor", matrix["general"]["detectors"])
             self.assertEqual(quality["quality_control"]["restoration_type"], 1)
             self.assertEqual(quality["quality_control"]["class_frequency"], 10)
+            self.assertNotIn("line_sensor", matrix["darl"]["detectors"])
+
+    def test_effective_restore_keeps_meaningful_null_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            profile_path = experiment.restore_profiles_dir / "default.yaml"
+            dump(
+                profile_path,
+                {
+                    "schema_version": 1,
+                    "detectors": {"camera": {}},
+                    "class_slice": {"drop_last": None},
+                },
+            )
+            profile = experiment.restore_profile("default")
+
+            effective = ExperimentParameters.load(experiment).effective_restore(
+                profile,
+                measurement_name="kmk_15",
+                measurement_inputs={},
+                calibration_result={},
+                matrix_result={},
+            )
+
+            self.assertNotIn("line_sensor", effective["restore"]["detectors"])
+            self.assertIsNone(effective["restore"]["class_slice"]["drop_last"])
 
     def test_measurement_parameters_are_optional(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

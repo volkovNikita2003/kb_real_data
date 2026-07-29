@@ -45,18 +45,18 @@ class CalibrationResultTests(unittest.TestCase):
 
     def test_non_finite_values_are_rejected_by_dataclasses(self) -> None:
         for value in (float("nan"), float("inf"), -float("inf")):
-            with self.subTest(value=value), self.assertRaisesRegex(CalibrationResultError, "finite"):
+            with self.subTest(value=value), self.assertRaisesRegex(CalibrationResultError, "конечным"):
                 CameraCalibrationResult(6.19, value, 0.0, 1e-6)
 
     def test_boolean_is_not_a_number(self) -> None:
-        with self.assertRaisesRegex(CalibrationResultError, "expected a number"):
+        with self.assertRaisesRegex(CalibrationResultError, "ожидалось число"):
             CameraCalibrationResult(True, 0.0, 0.0, 1e-6)
 
     def test_unknown_and_missing_fields_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.yaml"
             path.write_text("schema_version: 1\ncamera:\n  unknown: 1\n", encoding="utf-8")
-            with self.assertRaisesRegex(CalibrationResultError, "unknown fields"):
+            with self.assertRaisesRegex(CalibrationResultError, "неизвестные поля"):
                 load_calibration_result(path)
 
     def test_duplicate_keys_are_rejected(self) -> None:
@@ -67,13 +67,13 @@ class CalibrationResultTests(unittest.TestCase):
                 load_calibration_result(path)
 
     def test_invalid_geometry_is_rejected(self) -> None:
-        with self.assertRaisesRegex(CalibrationResultError, "positive"):
+        with self.assertRaisesRegex(CalibrationResultError, "положительным"):
             CameraCalibrationResult(6.19, 0.0, 0.0, 0.0)
         with self.assertRaisesRegex(CalibrationResultError, "less than"):
             LineSensorCalibrationResult(5.0, 1.0, 1e-6, 1e-6, 1.0, 0.0, 0.0)
 
     def test_unsupported_schema_is_rejected(self) -> None:
-        with self.assertRaisesRegex(CalibrationResultError, "unsupported"):
+        with self.assertRaisesRegex(CalibrationResultError, "не поддерживается"):
             CalibrationResult(2, camera())
 
 

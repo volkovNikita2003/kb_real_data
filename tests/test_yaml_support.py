@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import sys
 import tempfile
@@ -10,7 +10,13 @@ import unittest
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-from yaml_support import YamlError, dump_yaml, load_yaml, to_plain_data
+from yaml_support import (
+    YAML_OMIT_NONE,
+    YamlError,
+    dump_yaml,
+    load_yaml,
+    to_plain_data,
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +24,14 @@ class Example:
     name: str
     values: tuple[int, ...]
     path: Path
+
+
+@dataclass(frozen=True)
+class OptionalExample:
+    omitted: str | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+    retained: str | None = None
 
 
 class LoadYamlTests(unittest.TestCase):
@@ -74,6 +88,12 @@ class LoadYamlTests(unittest.TestCase):
 
 
 class DumpYamlTests(unittest.TestCase):
+    def test_only_marked_none_dataclass_fields_are_omitted(self) -> None:
+        self.assertEqual(
+            to_plain_data(OptionalExample()),
+            {"retained": None},
+        )
+
     def test_plain_conversion_handles_dataclasses_mappings_tuples_and_paths(self) -> None:
         value = {
             "example": Example("тест", (1, 2), Path("data/input.txt")),

@@ -10,6 +10,9 @@ import yaml
 from yaml.constructor import ConstructorError
 
 
+YAML_OMIT_NONE = "yaml_omit_none"
+
+
 class YamlError(ValueError):
     """A YAML document cannot be read, represented, or written safely."""
 
@@ -73,10 +76,13 @@ def load_yaml(path: str | Path) -> Any:
 def to_plain_data(value: Any) -> Any:
     """Recursively convert common project objects to safe YAML containers."""
     if is_dataclass(value) and not isinstance(value, type):
-        return {
-            item.name: to_plain_data(getattr(value, item.name))
-            for item in fields(value)
-        }
+        result: dict[str, Any] = {}
+        for item in fields(value):
+            item_value = getattr(value, item.name)
+            if item_value is None and item.metadata.get(YAML_OMIT_NONE, False):
+                continue
+            result[item.name] = to_plain_data(item_value)
+        return result
     if isinstance(value, Mapping):
         return {
             str(key): to_plain_data(item)

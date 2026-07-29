@@ -6,162 +6,41 @@ fields, implicit type conversions, and ambiguous defaults impossible.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields, is_dataclass
-import math
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-import yaml
-from yaml.constructor import ConstructorError
-
 from errors import ParametersError
 from experiment import Experiment, MeasurementParametersFile, RestoreProfile
+from schema_validation import SchemaValidator
+from yaml_support import YAML_OMIT_NONE, YamlError, dump_yaml, load_yaml, to_plain_data
 
 
 SCHEMA_VERSION = 1
+_VALIDATOR = SchemaValidator(ParametersError)
 
-
-class UniqueKeySafeLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects duplicate mapping keys."""
-
-
-def _construct_unique_mapping(
-    loader: UniqueKeySafeLoader,
-    node: yaml.MappingNode,
-    deep: bool = False,
-) -> dict[Any, Any]:
-    loader.flatten_mapping(node)
-    mapping: dict[Any, Any] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        try:
-            duplicate = key in mapping
-        except TypeError as error:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found an unhashable key",
-                key_node.start_mark,
-            ) from error
-        if duplicate:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-UniqueKeySafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
-
-
-def _mapping(value: Any, path: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ParametersError(f"{path}: ожидался объект YAML (mapping)")
-    if not all(isinstance(key, str) for key in value):
-        raise ParametersError(f"{path}: имена всех полей должны быть строками")
-    return value
-
-
-def _fields(
-    value: Any,
-    path: str,
-    *,
-    required: set[str] | frozenset[str] = frozenset(),
-    optional: set[str] | frozenset[str] = frozenset(),
-) -> dict[str, Any]:
-    data = _mapping(value, path)
-    unknown = sorted(data.keys() - required - optional)
-    if unknown:
-        raise ParametersError(
-            f"{path}: неизвестные поля: {', '.join(unknown)}"
-        )
-    missing = sorted(required - data.keys())
-    if missing:
-        raise ParametersError(
-            f"{path}: отсутствуют обязательные поля: {', '.join(missing)}"
-        )
-    return data
-
-
-def _string(value: Any, path: str) -> str:
-    if not isinstance(value, str):
-        raise ParametersError(f"{path}: ожидалась строка")
-    if not value:
-        raise ParametersError(f"{path}: строка не должна быть пустой")
-    return value
-
-
-def _boolean(value: Any, path: str) -> bool:
-    if type(value) is not bool:
-        raise ParametersError(f"{path}: ожидалось логическое значение")
-    return value
-
-
-def _integer(value: Any, path: str, *, positive: bool = False) -> int:
-    if type(value) is not int:
-        raise ParametersError(f"{path}: ожидалось целое число")
-    if positive and value <= 0:
-        raise ParametersError(f"{path}: число должно быть положительным")
-    return value
-
-
-def _number(
-    value: Any,
-    path: str,
-    *,
-    positive: bool = False,
-    non_negative: bool = False,
-) -> float:
-    if type(value) not in (int, float):
-        raise ParametersError(f"{path}: ожидалось число")
-    result = float(value)
-    if not math.isfinite(result):
-        raise ParametersError(f"{path}: число должно быть конечным")
-    if positive and result <= 0:
-        raise ParametersError(f"{path}: число должно быть положительным")
-    if non_negative and result < 0:
-        raise ParametersError(f"{path}: число не должно быть отрицательным")
-    return result
-
-
-def _choice(value: Any, path: str, choices: set[str]) -> str:
-    result = _string(value, path)
-    if result not in choices:
-        allowed = ", ".join(sorted(choices))
-        raise ParametersError(
-            f"{path}: неизвестное значение {result!r}; допустимо: {allowed}"
-        )
-    return result
+_mapping = _VALIDATOR.mapping
+_fields = _VALIDATOR.fields
+_string = _VALIDATOR.string
+_boolean = _VALIDATOR.boolean
+_integer = _VALIDATOR.integer
+_number = _VALIDATOR.number
+_choice = _VALIDATOR.choice
 
 
 def _schema(data: dict[str, Any], path: str) -> int:
-    version = _integer(data["schema_version"], f"{path}.schema_version")
-    if version != SCHEMA_VERSION:
-        raise ParametersError(
-            f"{path}.schema_version: версия {version} не поддерживается; "
-            f"поддерживается версия {SCHEMA_VERSION}"
-        )
-    return version
+    return _VALIDATOR.version(
+        data["schema_version"],
+        f"{path}.schema_version",
+        supported=SCHEMA_VERSION,
+    )
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        raise ParametersError(f"Файл параметров не найден: {path}")
-    if not path.is_file():
-        raise ParametersError(f"Путь параметров не является файлом: {path}")
     try:
-        with path.open("r", encoding="utf-8") as stream:
-            value = yaml.load(stream, Loader=UniqueKeySafeLoader)
-    except (OSError, yaml.YAMLError) as error:
-        raise ParametersError(f"Не удалось прочитать YAML {path}: {error}") from error
-    if value is None:
-        raise ParametersError(f"Файл параметров пуст: {path}")
+        value = load_yaml(path)
+    except YamlError as error:
+        raise ParametersError(str(error)) from error
     return _mapping(value, path.name)
 
 
@@ -189,8 +68,12 @@ class LineSensorDetectorParameters:
 
 @dataclass(frozen=True)
 class ExperimentDetectors:
-    camera: CameraDetectorParameters | None = None
-    line_sensor: LineSensorDetectorParameters | None = None
+    camera: CameraDetectorParameters | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+    line_sensor: LineSensorDetectorParameters | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
 
     def names(self) -> frozenset[str]:
         return frozenset(
@@ -319,8 +202,12 @@ class AutomaticLineSensorCalibration:
 class CalibrationParameters:
     schema_version: int
     mode: str
-    camera: AutomaticCameraCalibration | None = None
-    line_sensor: AutomaticLineSensorCalibration | None = None
+    camera: AutomaticCameraCalibration | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+    line_sensor: AutomaticLineSensorCalibration | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
 
 
 def load_calibration_parameters(path: str | Path) -> CalibrationParameters:
@@ -451,8 +338,12 @@ class DarlLineSensor:
 
 @dataclass(frozen=True)
 class DarlDetectors:
-    camera: DarlCamera | None = None
-    line_sensor: DarlLineSensor | None = None
+    camera: DarlCamera | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+    line_sensor: DarlLineSensor | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
 
     def names(self) -> frozenset[str]:
         return frozenset(
@@ -776,8 +667,12 @@ class RestoreDetector:
 
 @dataclass(frozen=True)
 class RestoreDetectors:
-    camera: RestoreDetector | None = None
-    line_sensor: RestoreDetector | None = None
+    camera: RestoreDetector | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+    line_sensor: RestoreDetector | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
 
     def names(self) -> frozenset[str]:
         return frozenset(
@@ -954,8 +849,8 @@ class CalibrationStageParameters:
     def effective_parameters(self) -> dict[str, Any]:
         return {
             "schema_version": SCHEMA_VERSION,
-            "general": _plain(self.general),
-            "calibration": _plain(self.calibration),
+            "general": to_plain_data(self.general),
+            "calibration": to_plain_data(self.calibration),
         }
 
 
@@ -1024,9 +919,9 @@ class ExperimentParameters:
     ) -> dict[str, Any]:
         return {
             "schema_version": SCHEMA_VERSION,
-            "general": _plain(self.general),
-            "darl": _plain(self.darl),
-            "calibration_result": _plain(calibration_result),
+            "general": to_plain_data(self.general),
+            "darl": to_plain_data(self.darl),
+            "calibration_result": to_plain_data(calibration_result),
         }
 
     def effective_quality_control(
@@ -1035,10 +930,10 @@ class ExperimentParameters:
     ) -> dict[str, Any]:
         return {
             "schema_version": SCHEMA_VERSION,
-            "general": _plain(self.general),
-            "darl": _plain(self.darl),
-            "matrix_result": _plain(matrix_result),
-            "quality_control": _plain(DarlQualityControl()),
+            "general": to_plain_data(self.general),
+            "darl": to_plain_data(self.darl),
+            "matrix_result": to_plain_data(matrix_result),
+            "quality_control": to_plain_data(DarlQualityControl()),
         }
 
     def effective_expected_signal(
@@ -1053,10 +948,10 @@ class ExperimentParameters:
             "experiment": {
                 "measurement": parameters_file.measurement_name,
             },
-            "general": _plain(self.general),
-            "darl": _plain(self.darl),
-            "measurement": _plain(measurement),
-            "matrix_result": _plain(matrix_result),
+            "general": to_plain_data(self.general),
+            "darl": to_plain_data(self.darl),
+            "measurement": to_plain_data(measurement),
+            "matrix_result": to_plain_data(matrix_result),
         }
 
     def effective_restore(
@@ -1075,61 +970,23 @@ class ExperimentParameters:
                 "measurement": measurement_name,
                 "restore_profile": profile.name,
             },
-            "general": _plain(self.general),
-            "restore": _plain(restore),
-            "measurement_inputs": _plain(measurement_inputs),
-            "calibration_result": _plain(calibration_result),
-            "matrix_result": _plain(matrix_result),
+            "general": to_plain_data(self.general),
+            "restore": to_plain_data(restore),
+            "measurement_inputs": to_plain_data(measurement_inputs),
+            "calibration_result": to_plain_data(calibration_result),
+            "matrix_result": to_plain_data(matrix_result),
         }
-
-
-def _plain(value: Any) -> Any:
-    if is_dataclass(value) and not isinstance(value, type):
-        result = {
-            item.name: _plain(getattr(value, item.name))
-            for item in fields(value)
-        }
-        if isinstance(
-            value,
-            (
-                ExperimentDetectors,
-                DarlDetectors,
-                RestoreDetectors,
-                CalibrationParameters,
-            ),
-        ):
-            result = {
-                key: item
-                for key, item in result.items()
-                if key not in {"camera", "line_sensor"} or item is not None
-            }
-        return result
-    if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, Path):
-        return str(value)
-    return value
 
 
 def write_used_parameters(path: str | Path, parameters: Any) -> None:
     """Write a complete effective parameter mapping as stable safe YAML."""
     destination = Path(path)
-    if destination.exists():
-        raise ParametersError(
-            f"Файл фактически использованных параметров уже существует: {destination}"
-        )
-    destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with destination.open("x", encoding="utf-8") as stream:
-            yaml.safe_dump(
-                _plain(parameters),
-                stream,
-                allow_unicode=True,
-                sort_keys=False,
-            )
-    except OSError as error:
-        raise ParametersError(
-            f"Не удалось записать фактические параметры {destination}: {error}"
-        ) from error
+        dump_yaml(destination, parameters, overwrite=False)
+    except YamlError as error:
+        if destination.exists():
+            raise ParametersError(
+                "Файл фактически использованных параметров уже существует: "
+                f"{destination}"
+            ) from error
+        raise ParametersError(str(error)) from error

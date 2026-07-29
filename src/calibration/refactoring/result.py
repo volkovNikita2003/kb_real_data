@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass
-import math
 from pathlib import Path
 from typing import Any
 
-import yaml
-from yaml.constructor import ConstructorError
+from schema_validation import SchemaValidator
+from yaml_support import YamlError, dump_yaml, load_yaml
 
 
 RESULT_SCHEMA_VERSION = 1
@@ -19,79 +18,9 @@ class CalibrationResultError(ValueError):
     """The calibration result is malformed or cannot be read/written."""
 
 
-class _UniqueKeySafeLoader(yaml.SafeLoader):
-    """Safe YAML loader which also rejects duplicate mapping keys."""
-
-
-def _construct_unique_mapping(
-    loader: _UniqueKeySafeLoader,
-    node: yaml.MappingNode,
-    deep: bool = False,
-) -> dict[Any, Any]:
-    loader.flatten_mapping(node)
-    result: dict[Any, Any] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        try:
-            duplicate = key in result
-        except TypeError as error:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found an unhashable key",
-                key_node.start_mark,
-            ) from error
-        if duplicate:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        result[key] = loader.construct_object(value_node, deep=deep)
-    return result
-
-
-_UniqueKeySafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
-
-
-def _mapping(value: Any, path: str) -> dict[str, Any]:
-    if not isinstance(value, dict) or not all(isinstance(k, str) for k in value):
-        raise CalibrationResultError(f"{path}: expected a YAML mapping with string keys")
-    return value
-
-
-def _fields(
-    value: Any,
-    path: str,
-    *,
-    required: frozenset[str],
-    optional: frozenset[str] = frozenset(),
-) -> dict[str, Any]:
-    data = _mapping(value, path)
-    unknown = sorted(data.keys() - required - optional)
-    missing = sorted(required - data.keys())
-    if unknown:
-        raise CalibrationResultError(f"{path}: unknown fields: {', '.join(unknown)}")
-    if missing:
-        raise CalibrationResultError(f"{path}: missing required fields: {', '.join(missing)}")
-    return data
-
-
-def _number(value: Any, path: str, *, positive: bool = False, non_negative: bool = False) -> float:
-    if type(value) not in (int, float):
-        raise CalibrationResultError(f"{path}: expected a number")
-    result = float(value)
-    if not math.isfinite(result):
-        raise CalibrationResultError(f"{path}: number must be finite")
-    if positive and result <= 0:
-        raise CalibrationResultError(f"{path}: number must be positive")
-    if non_negative and result < 0:
-        raise CalibrationResultError(f"{path}: number must be non-negative")
-    return result
+_VALIDATOR = SchemaValidator(CalibrationResultError)
+_fields = _VALIDATOR.fields
+_number = _VALIDATOR.number
 
 
 @dataclass(frozen=True)
@@ -137,13 +66,11 @@ class CalibrationResult(Mapping[str, Any]):
     line_sensor: LineSensorCalibrationResult | None = None
 
     def __post_init__(self) -> None:
-        if type(self.schema_version) is not int:
-            raise CalibrationResultError("schema_version: expected an integer")
-        if self.schema_version != RESULT_SCHEMA_VERSION:
-            raise CalibrationResultError(
-                f"schema_version: unsupported version {self.schema_version}; "
-                f"supported version is {RESULT_SCHEMA_VERSION}"
-            )
+        _VALIDATOR.version(
+            self.schema_version,
+            "schema_version",
+            supported=RESULT_SCHEMA_VERSION,
+        )
         if not isinstance(self.camera, CameraCalibrationResult):
             raise CalibrationResultError("camera: expected CameraCalibrationResult")
         if self.line_sensor is not None and not isinstance(self.line_sensor, LineSensorCalibrationResult):
@@ -198,15 +125,10 @@ def calibration_result_from_dict(value: Any) -> CalibrationResult:
 
 def load_calibration_result(path: str | Path) -> CalibrationResult:
     source = Path(path)
-    if not source.is_file():
-        raise CalibrationResultError(f"calibration result file not found: {source}")
     try:
-        with source.open("r", encoding="utf-8") as stream:
-            value = yaml.load(stream, Loader=_UniqueKeySafeLoader)
-    except (OSError, yaml.YAMLError) as error:
-        raise CalibrationResultError(f"cannot read calibration result {source}: {error}") from error
-    if value is None:
-        raise CalibrationResultError(f"calibration result file is empty: {source}")
+        value = load_yaml(source)
+    except YamlError as error:
+        raise CalibrationResultError(str(error)) from error
     return calibration_result_from_dict(value)
 
 
@@ -215,8 +137,6 @@ def save_calibration_result(result: CalibrationResult, path: str | Path) -> None
         raise CalibrationResultError("result: expected CalibrationResult")
     target = Path(path)
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("w", encoding="utf-8") as stream:
-            yaml.safe_dump(result.to_dict(), stream, allow_unicode=True, sort_keys=False)
-    except OSError as error:
-        raise CalibrationResultError(f"cannot write calibration result {target}: {error}") from error
+        dump_yaml(target, result.to_dict())
+    except YamlError as error:
+        raise CalibrationResultError(str(error)) from error
