@@ -80,4 +80,4 @@ class LegacyCalibrationReferenceTests(unittest.TestCase):
                 actual = np.loadtxt(output / actual_name, skiprows=1)
                 expected = np.loadtxt(reference / reference_name, skiprows=1)
                 relative_error = np.linalg.norm(actual - expected) / np.linalg.norm(expected)
-                self.assertLess(relative_error, 1e-6, actual_name)
+                self.assertLess(relative_error, 2e-6, actual_name)

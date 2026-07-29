@@ -553,6 +553,11 @@ if is_add_lin:
 
     signal_norm_lin = signal_lin / exposure_time_us_lin / width_pix_x_m / width_pix_y_m
     signal_orig_norm_lin = signal_lin_orig / exposure_time_us_lin / width_pix_x_m / width_pix_y_m
+    np.savetxt(PATH_SAVE_PREPROCESSING_DIR/"signal_lin.txt", signal_lin)
+    np.savetxt(PATH_SAVE_PREPROCESSING_DIR/"signal_norm_lin.txt", signal_norm_lin)
+    print(f"{exposure_time_us_lin=}")
+    print(f"{width_pix_x_m=}")
+    print(f"{width_pix_y_m=}")
 
 
     plt.figure(figsize=(10, 5))
@@ -670,8 +675,14 @@ if is_add_lin:
         diam_um_pinhole_lin,
         0.0
     ]
+    print("before fit")
+    print(f"{p0[0]=}")
+    print(f"{p0[1]=}")
+    print(f"{p0[2]=}")
+    print(f"{F_lens_um=}, {lamb_um=}")
     popt, pcov = curve_fit(model_lin, x_fit, y_fit, p0=p0)
     A_lin, d_um, x_gap_um = popt
+    print("after fit")
     print(f"A = {A_lin:.4f}")
     print(f"d_um = {d_um:.4f}")
     print(f"x_gap_um = {x_gap_um:.4f}")

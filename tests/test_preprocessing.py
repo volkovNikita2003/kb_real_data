@@ -61,3 +61,13 @@ class PreprocessingWarningCliTests(unittest.TestCase):
                 "experiment", "--warnings-as-errors", "--no-warnings",
             ])
         self.assertEqual(raised.exception.code, 2)
+
+
+class LegacyEnvironmentTests(unittest.TestCase):
+    def test_src_is_added_to_child_pythonpath(self) -> None:
+        with patch.dict(preprocessing.os.environ, {"PYTHONPATH": "existing"}):
+            environment = preprocessing._legacy_environment()
+        self.assertEqual(
+            environment["PYTHONPATH"].split(preprocessing.os.pathsep),
+            [str(SRC_DIR), "existing"],
+        )

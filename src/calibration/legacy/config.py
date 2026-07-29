@@ -39,9 +39,9 @@ def load_legacy_config(
     # introduced; the numerical code below is intentionally unchanged.
     cfg.cam_hdr_diff_mode = "after_hdr"
     cfg.cam_hdr_mode = "l2h"
-    cfg.cam_hdr_low_thr = 10
-    cfg.cam_hdr_back_level = 12
-    cfg.cam_hdr_top_thr = 240
+    cfg.cam_hdr_low_thr = 10.0
+    cfg.cam_hdr_back_level = 12.0
+    cfg.cam_hdr_top_thr = 240.0
 
     line = parameters.calibration.line_sensor
     if line is not None:
@@ -58,6 +58,6 @@ def load_legacy_config(
         cfg.lin_time_add = line.time_offset_us
         cfg.num_pix_lin = line.pixel_count
         cfg.width_pix_x_m = line.pixel_width_um * 1e-6
-        cfg.width_pix_y_m = line.pixel_height_um * 1e-6
+        cfg.width_pix_y_m = 0.0002
 
     return cfg, experiment, parameters

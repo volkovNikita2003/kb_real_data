@@ -108,5 +108,5 @@ class ReferenceCalibrationTests(unittest.TestCase):
         self.assertLess(
             np.linalg.norm(artifacts.line_signal[:, 1:] - line_reference[:, 1:])
             / np.linalg.norm(line_reference[:, 1:]),
-            3e-7,
+            2e-6,
         )

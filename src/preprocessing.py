@@ -16,6 +16,20 @@ from validate import format_report
 from validation import validate_calibration_inputs
 
 
+SRC_DIR = Path(__file__).resolve().parent
+
+
+def _legacy_environment() -> dict[str, str]:
+    """Return an environment in which the child can import packages from src."""
+    environment = os.environ.copy()
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(SRC_DIR), existing_pythonpath) if part
+    )
+    environment.setdefault("MPLBACKEND", "Agg")
+    return environment
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Выполнить автоматическую калибровку детекторов.",
@@ -47,8 +61,6 @@ def run(experiment: Experiment, parameters: ExperimentParameters, *, force: bool
             if position == "new"
             else "calibration.legacy.preprocessing"
         )
-        environment = os.environ.copy()
-        environment.setdefault("MPLBACKEND", "Agg")
         completed = subprocess.run(
             [
                 sys.executable,
@@ -58,7 +70,7 @@ def run(experiment: Experiment, parameters: ExperimentParameters, *, force: bool
                 "--output-dir",
                 str(directory),
             ],
-            env=environment,
+            env=_legacy_environment(),
             check=False,
         )
         if completed.returncode != 0:
