@@ -169,6 +169,10 @@ class Experiment:
         return self.output_dir / "calibration"
 
     @property
+    def calibration_result_file(self) -> Path:
+        return self.calibration_output_dir / "result.yaml"
+
+    @property
     def darl_output_dir(self) -> Path:
         return self.output_dir / "darl"
 

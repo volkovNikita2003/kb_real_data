@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from calibration.refactoring.result import CalibrationResult, load_calibration_result
 from errors import ParametersError
 from experiment import Experiment, MeasurementParametersFile, RestoreProfile
 from schema_validation import SchemaValidator
@@ -413,6 +414,32 @@ class DarlQualityControl:
     small_particle_boundary_nm: float = 300.0
     evaluation_type: int = 1
     class_frequency: int = 10
+
+
+@dataclass(frozen=True)
+class DarlRunDistribution:
+    """One distribution actually added to the legacy DARL state."""
+
+    name: str
+    source: str
+    type: str
+    mean_nm: float
+    sigma_nm: float
+    particle_count: float
+    parameters_file: str | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+
+
+def _quality_control_distribution() -> DarlRunDistribution:
+    return DarlRunDistribution(
+        name="pinhole_200",
+        source="built_in_quality_control",
+        type="gaussian",
+        mean_nm=200_000.0,
+        sigma_nm=500.0,
+        particle_count=20_000.0,
+    )
 
 
 @dataclass(frozen=True)
@@ -851,6 +878,98 @@ class CalibrationStageParameters:
             "schema_version": SCHEMA_VERSION,
             "general": to_plain_data(self.general),
             "calibration": to_plain_data(self.calibration),
+        }
+
+
+@dataclass(frozen=True)
+class DarlStageParameters:
+    """Complete inputs consumed by the single legacy ``calc_darl`` run."""
+
+    general: GeneralParameters
+    darl: DarlParameters
+    calibration_result: CalibrationResult
+    distributions: tuple[DarlRunDistribution, ...]
+    quality_control: DarlQualityControl = field(default_factory=DarlQualityControl)
+
+    @classmethod
+    def load(cls, experiment: Experiment) -> "DarlStageParameters":
+        general = load_general_parameters(experiment.general_parameters_file)
+        darl = load_darl_parameters(experiment.darl_parameters_file)
+        calibration_result = load_calibration_result(
+            experiment.calibration_result_file
+        )
+
+        distributions = [_quality_control_distribution()]
+        reserved_names = {distribution.name for distribution in distributions}
+        for measurement_name in experiment.measurement_names():
+            parameters_file = experiment.measurement_parameters_file(
+                measurement_name
+            )
+            if parameters_file is None:
+                continue
+            if measurement_name in reserved_names:
+                raise ParametersError(
+                    f"Имя измерения {measurement_name!r} конфликтует со "
+                    "встроенным контрольным распределением"
+                )
+            measurement = load_measurement_parameters(parameters_file.path)
+            expected = measurement.expected_distribution
+            distributions.append(
+                DarlRunDistribution(
+                    name=measurement_name,
+                    source="measurement",
+                    type=expected.type,
+                    mean_nm=expected.mean_nm,
+                    sigma_nm=expected.sigma_nm,
+                    particle_count=expected.particle_count,
+                    parameters_file=str(
+                        parameters_file.path.relative_to(experiment.path)
+                    ),
+                )
+            )
+
+        result = cls(
+            general=general,
+            darl=darl,
+            calibration_result=calibration_result,
+            distributions=tuple(distributions),
+        )
+        result.validate_consistency()
+        return result
+
+    def validate_consistency(self) -> None:
+        expected = self.general.detectors.names()
+        modeled = self.darl.detectors.names()
+        if modeled != expected:
+            raise ParametersError(
+                "darl.yaml: набор секций детекторов должен совпадать "
+                f"с general.yaml; ожидалось {sorted(expected)}, "
+                f"получено {sorted(modeled)}"
+            )
+
+        calibrated = {"camera"}
+        if self.calibration_result.line_sensor is not None:
+            calibrated.add("line_sensor")
+        if calibrated != expected:
+            raise ParametersError(
+                "calibration/result.yaml: набор результатов детекторов должен "
+                f"совпадать с general.yaml; ожидалось {sorted(expected)}, "
+                f"получено {sorted(calibrated)}"
+            )
+
+    def effective_parameters(self) -> dict[str, Any]:
+        distributions: dict[str, Any] = {}
+        for distribution in self.distributions:
+            data = to_plain_data(distribution)
+            data.pop("name")
+            distributions[distribution.name] = data
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "general": to_plain_data(self.general),
+            "darl": to_plain_data(self.darl),
+            "calibration_result": self.calibration_result.to_dict(),
+            "quality_control": to_plain_data(self.quality_control),
+            "distributions": distributions,
         }
 
 

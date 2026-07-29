@@ -15,12 +15,20 @@ from errors import ParametersError
 from experiment import Experiment
 from parameters import (
     CalibrationStageParameters,
+    DarlStageParameters,
     ExperimentParameters,
     load_calibration_parameters,
     load_darl_parameters,
     load_general_parameters,
     load_measurement_parameters,
     write_used_parameters,
+)
+from calibration.refactoring.result import (
+    CalibrationResult,
+    CalibrationResultError,
+    CameraCalibrationResult,
+    LineSensorCalibrationResult,
+    save_calibration_result,
 )
 
 
@@ -68,6 +76,32 @@ def create_camera_experiment(root: Path) -> Experiment:
     dump(parameters / "darl.yaml", CAMERA_DARL)
     (path / "data/kmk_15").mkdir()
     return Experiment.open(path)
+
+
+def save_camera_calibration_result(
+    experiment: Experiment,
+    *,
+    with_line_sensor: bool = False,
+) -> None:
+    line = None
+    if with_line_sensor:
+        line = LineSensorCalibrationResult(
+            0.88,
+            5.09,
+            8.1e-6,
+            2.02e-4,
+            0.31,
+            0.02,
+            1752.0,
+        )
+    save_calibration_result(
+        CalibrationResult(
+            1,
+            CameraCalibrationResult(6.19, 1.7e-4, 4.9e-5, 1.91e-6),
+            line,
+        ),
+        experiment.calibration_result_file,
+    )
 
 
 class GeneralParametersTests(unittest.TestCase):
@@ -328,6 +362,129 @@ class EffectiveParametersTests(unittest.TestCase):
             self.assertNotIn("line_sensor", effective["restore"]["detectors"])
             self.assertIsNone(effective["restore"]["class_slice"]["drop_last"])
 
+
+class DarlStageParametersTests(unittest.TestCase):
+    def test_loads_only_darl_stage_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            save_camera_calibration_result(experiment)
+            experiment.calibration_parameters_file.write_text(
+                "invalid calibration YAML: [",
+                encoding="utf-8",
+            )
+            dump(
+                experiment.restore_profiles_dir / "broken.yaml",
+                {"not": "a restore profile"},
+            )
+
+            parameters = DarlStageParameters.load(experiment)
+
+            self.assertEqual(parameters.general.detectors.names(), {"camera"})
+            self.assertEqual(parameters.darl.detectors.names(), {"camera"})
+            self.assertEqual(
+                tuple(item.name for item in parameters.distributions),
+                ("pinhole_200",),
+            )
+
+    def test_requires_calibration_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+
+            with self.assertRaisesRegex(CalibrationResultError, "не найден"):
+                DarlStageParameters.load(experiment)
+
+    def test_loads_expected_distributions_in_measurement_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            (experiment.data_dir / "aaa").mkdir()
+            experiment = Experiment.open(experiment.path)
+            save_camera_calibration_result(experiment)
+            for name, mean in (("kmk_15", 15_000), ("aaa", 10_000)):
+                dump(
+                    experiment.measurement_parameters_dir / f"{name}.yaml",
+                    {
+                        "schema_version": 1,
+                        "expected_distribution": {
+                            "type": "gaussian",
+                            "mean_nm": mean,
+                            "sigma_nm": 1000,
+                            "particle_count": 20_000,
+                        },
+                    },
+                )
+
+            parameters = DarlStageParameters.load(experiment)
+
+            self.assertEqual(
+                tuple(item.name for item in parameters.distributions),
+                ("pinhole_200", "aaa", "kmk_15"),
+            )
+            self.assertEqual(
+                parameters.distributions[1].parameters_file,
+                "input_parameters/measurements/aaa.yaml",
+            )
+
+    def test_detector_sets_must_match_calibration_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            general = yaml.safe_load(
+                experiment.general_parameters_file.read_text(encoding="utf-8")
+            )
+            general["detectors"]["line_sensor"] = {}
+            dump(experiment.general_parameters_file, general)
+            darl = yaml.safe_load(
+                experiment.darl_parameters_file.read_text(encoding="utf-8")
+            )
+            darl["detectors"]["line_sensor"] = {}
+            dump(experiment.darl_parameters_file, darl)
+            save_camera_calibration_result(experiment)
+
+            with self.assertRaisesRegex(
+                ParametersError,
+                "набор результатов детекторов",
+            ):
+                DarlStageParameters.load(experiment)
+
+    def test_detector_sets_must_match_darl_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            darl = yaml.safe_load(
+                experiment.darl_parameters_file.read_text(encoding="utf-8")
+            )
+            darl["detectors"]["line_sensor"] = {}
+            dump(experiment.darl_parameters_file, darl)
+            save_camera_calibration_result(experiment)
+
+            with self.assertRaisesRegex(
+                ParametersError,
+                "darl.yaml: набор секций детекторов",
+            ):
+                DarlStageParameters.load(experiment)
+
+    def test_effective_parameters_include_defaults_and_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            experiment = create_camera_experiment(Path(directory))
+            save_camera_calibration_result(experiment)
+            parameters = DarlStageParameters.load(experiment)
+
+            effective = parameters.effective_parameters()
+
+            self.assertEqual(effective["schema_version"], 1)
+            self.assertEqual(
+                effective["quality_control"]["class_frequency"],
+                10,
+            )
+            self.assertEqual(
+                effective["distributions"]["pinhole_200"]["source"],
+                "built_in_quality_control",
+            )
+            self.assertNotIn(
+                "parameters_file",
+                effective["distributions"]["pinhole_200"],
+            )
+
+
+class ParameterFileTests(unittest.TestCase):
     def test_measurement_parameters_are_optional(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             experiment = create_camera_experiment(Path(directory))

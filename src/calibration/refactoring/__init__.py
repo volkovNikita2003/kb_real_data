@@ -1,6 +1,5 @@
 """Experimental refactoring of the legacy calibration calculations."""
 
-from .engine import CalibrationArtifacts, calibrate
 from .result import (
     CalibrationResult,
     CalibrationResultError,
@@ -9,6 +8,17 @@ from .result import (
     load_calibration_result,
     save_calibration_result,
 )
+
+
+def __getattr__(name: str):
+    if name in {"CalibrationArtifacts", "calibrate"}:
+        from .engine import CalibrationArtifacts, calibrate
+
+        return {
+            "CalibrationArtifacts": CalibrationArtifacts,
+            "calibrate": calibrate,
+        }[name]
+    raise AttributeError(name)
 
 __all__ = [
     "CalibrationArtifacts",

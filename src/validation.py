@@ -11,6 +11,7 @@ from errors import ExperimentStructureError, ParametersError
 from experiment import Experiment, Measurement, RestoreProfile, validate_safe_name
 from parameters import (
     CalibrationStageParameters,
+    DarlStageParameters,
     ExperimentParameters,
     RestoreParameters,
     load_measurement_parameters,
@@ -603,4 +604,51 @@ def validate_calibration_inputs(
     report = _ReportBuilder()
     _validate_parameter_layout(experiment, report)
     _validate_calibration(experiment, parameters, report)
+    return report.build()
+
+
+def validate_darl_inputs(
+    experiment: Experiment,
+    parameters: DarlStageParameters,
+    *,
+    code_git_dir: str | Path,
+) -> ValidationReport:
+    """Validate only inputs consumed by an independent legacy DARL run."""
+    report = _ReportBuilder()
+    _validate_parameter_layout(experiment, report)
+
+    configured_measurements = {
+        distribution.name
+        for distribution in parameters.distributions
+        if distribution.source == "measurement"
+    }
+    for measurement in experiment.measurements():
+        if measurement.name not in configured_measurements:
+            report.add(
+                "warning",
+                "missing_expected_distribution",
+                "Для измерения не задано ожидаемое распределение; "
+                "его модельный сигнал не будет рассчитан",
+                path=(
+                    experiment.measurement_parameters_dir
+                    / f"{measurement.name}.yaml"
+                ),
+                measurement=measurement.name,
+            )
+
+    code_git = Path(code_git_dir).expanduser().resolve()
+    if not code_git.is_dir():
+        report.add(
+            "error",
+            "missing_code_git_directory",
+            "Не найдена директория вычислительного проекта code_git",
+            path=code_git,
+        )
+    elif not (code_git / "data/configs").is_dir():
+        report.add(
+            "error",
+            "missing_code_git_configs_directory",
+            "Не найдена директория legacy-конфигураций code_git/data/configs",
+            path=code_git / "data/configs",
+        )
     return report.build()

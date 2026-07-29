@@ -52,6 +52,10 @@ class ExperimentTests(unittest.TestCase):
                 path / "output/darl/matrix",
             )
             self.assertEqual(
+                experiment.calibration_result_file,
+                path / "output/calibration/result.yaml",
+            )
+            self.assertEqual(
                 experiment.quality_control_output_dir,
                 path / "output/darl/quality_control",
             )

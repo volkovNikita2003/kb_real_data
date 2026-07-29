@@ -5,6 +5,7 @@ from io import StringIO
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 import yaml
@@ -16,7 +17,11 @@ sys.path.insert(0, str(SRC_DIR))
 from experiment import Experiment
 from parameters import ExperimentParameters
 from validate import format_report, main
-from validation import parse_exposure_filename, validate_experiment
+from validation import (
+    parse_exposure_filename,
+    validate_darl_inputs,
+    validate_experiment,
+)
 
 
 def dump(path: Path, value: object) -> None:
@@ -125,6 +130,69 @@ class ExposureFilenameTests(unittest.TestCase):
         for name in ("0.bmp", "-1.bmp", "01.bmp", "1.5.bmp", "1us.bmp", "1.BMP"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 parse_exposure_filename(name, ".bmp")
+
+
+class DarlValidationTests(unittest.TestCase):
+    def test_missing_expected_distribution_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            experiment = Experiment.open(create_experiment(root))
+            code_git = root / "code_git"
+            (code_git / "data/configs").mkdir(parents=True)
+            parameters = SimpleNamespace(distributions=(
+                SimpleNamespace(
+                    name="pinhole_200", source="built_in_quality_control"
+                ),
+            ))
+
+            report = validate_darl_inputs(
+                experiment, parameters, code_git_dir=code_git
+            )
+
+            self.assertTrue(report.is_valid)
+            self.assertEqual(
+                {issue.code for issue in report.warnings},
+                {"missing_expected_distribution"},
+            )
+
+    def test_configured_distribution_and_code_git_are_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = create_experiment(root)
+            dump(
+                path / "input_parameters/measurements/sample.yaml",
+                {
+                    "schema_version": 1,
+                    "expected_distribution": {
+                        "type": "gaussian", "mean_nm": 10,
+                        "sigma_nm": 1, "particle_count": 1,
+                    },
+                },
+            )
+            experiment = Experiment.open(path)
+            code_git = root / "code_git"
+            (code_git / "data/configs").mkdir(parents=True)
+            parameters = SimpleNamespace(distributions=(
+                SimpleNamespace(name="sample", source="measurement"),
+            ))
+
+            report = validate_darl_inputs(
+                experiment, parameters, code_git_dir=code_git
+            )
+            self.assertEqual(report.issues, ())
+
+    def test_missing_code_git_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            experiment = Experiment.open(create_experiment(root))
+            parameters = SimpleNamespace(distributions=())
+            report = validate_darl_inputs(
+                experiment, parameters, code_git_dir=root / "missing"
+            )
+            self.assertIn(
+                "missing_code_git_directory",
+                {issue.code for issue in report.errors},
+            )
 
 
 class ValidationTests(unittest.TestCase):
