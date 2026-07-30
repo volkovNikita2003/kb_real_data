@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 import sys
@@ -14,13 +15,24 @@ import yaml
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
+from calibration.refactoring.result import (
+    CalibrationResult,
+    CameraCalibrationResult,
+    LineSensorCalibrationResult,
+)
+from darl.result import DarlDistributionResult, DarlResult, DarlSignalContract
 from experiment import Experiment
-from parameters import ExperimentParameters
+from parameters import (
+    ExperimentParameters,
+    load_general_parameters,
+    load_restore_parameters,
+)
 from validate import format_report, main
 from validation import (
     parse_exposure_filename,
     validate_darl_inputs,
     validate_experiment,
+    validate_restore_inputs,
 )
 
 
@@ -446,6 +458,132 @@ class ValidationTests(unittest.TestCase):
             self.assertNotIn(
                 "unused_camera_background",
                 {i.code for i in default_only.warnings},
+            )
+
+
+class RestoreValidationTests(unittest.TestCase):
+    def _inputs(self, root: Path, *, with_line: bool = False):
+        path = root / "experiment"
+        (path / "data/calibration").mkdir(parents=True)
+        detectors: dict[str, object] = {"camera": {}}
+        restore_detectors: dict[str, object] = {
+            "camera": {"use_background": True}
+        }
+        darl_detectors = ["camera"]
+        bins = ["bins_front_detector.txt"]
+        line_calibration = None
+        if with_line:
+            detectors["line_sensor"] = {}
+            restore_detectors["line_sensor"] = {"use_background": True}
+            darl_detectors.append("line_sensor")
+            bins.append("FrontDetectorLogLine_detector.txt")
+            line_calibration = LineSensorCalibrationResult(
+                1, 10, 8e-6, 2e-4, 0.3, 0.02, 1700
+            )
+
+        dump(
+            path / "input_parameters/general.yaml",
+            {
+                "schema_version": 1,
+                "detectors": detectors,
+                "instrument": {"detector_position": "new"},
+            },
+        )
+        dump(
+            path / "input_parameters/restore_profiles/default.yaml",
+            {"schema_version": 1, "detectors": restore_detectors},
+        )
+        touch(path / "data/sample/cam/100.bmp")
+        touch(path / "data/sample/cam_back/100.bmp")
+        if with_line:
+            touch(path / "data/sample/lin/10.txt")
+            touch(path / "data/sample/lin_back/10.txt")
+
+        for name in ("matrix.npz", "particle_classes_lasser_0.txt", *bins):
+            touch(path / "output/darl" / name)
+        touch(path / "output/darl/sample/modeled_signal.txt")
+
+        experiment = Experiment.open(path)
+        profile = experiment.restore_profile("default")
+        calibration = CalibrationResult(
+            1,
+            CameraCalibrationResult(6.3, 0, 0, 1.9e-6),
+            line_calibration,
+        )
+        darl = DarlResult(
+            1, "legacy", tuple(darl_detectors), DarlSignalContract("signal"),
+            "matrix.npz", "particle_classes_lasser_0.txt", tuple(bins),
+            ("background_signal_laser_0.txt",),
+            (DarlDistributionResult(
+                "sample", "sample/modeled_signal.txt",
+                ("sample/modeled_signal.txt",),
+            ),),
+        )
+        return (
+            experiment,
+            experiment.measurement("sample"),
+            profile,
+            load_general_parameters(experiment.general_parameters_file),
+            load_restore_parameters(profile.path),
+            calibration,
+            darl,
+        )
+
+    def _validate(self, inputs):
+        experiment, measurement, profile, general, restore, calibration, darl = inputs
+        return validate_restore_inputs(
+            experiment,
+            measurement=measurement,
+            profile=profile,
+            general=general,
+            restore=restore,
+            calibration=calibration,
+            darl=darl,
+        )
+
+    def test_valid_camera_and_line_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report = self._validate(self._inputs(Path(directory), with_line=True))
+            self.assertEqual(report.issues, ())
+
+    def test_missing_mandatory_darl_artifacts_are_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = self._inputs(Path(directory))
+            (inputs[0].darl_output_dir / "matrix.npz").unlink()
+            (inputs[0].darl_output_dir / "bins_front_detector.txt").unlink()
+            report = self._validate(inputs)
+            self.assertEqual(
+                {issue.code for issue in report.errors},
+                {"missing_darl_matrix", "missing_darl_detector_bins"},
+            )
+
+    def test_missing_expected_signal_is_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = list(self._inputs(Path(directory)))
+            inputs[-1] = replace(inputs[-1], distributions=())
+            report = self._validate(tuple(inputs))
+            self.assertTrue(report.is_valid)
+            self.assertEqual(
+                {issue.code for issue in report.warnings},
+                {"missing_expected_signal"},
+            )
+
+    def test_line_detector_requires_calibration_and_darl_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = list(self._inputs(Path(directory), with_line=True))
+            inputs[-2] = replace(inputs[-2], line_sensor=None)
+            inputs[-1] = replace(
+                inputs[-1], detectors=("camera",),
+                detector_bin_files=("bins_front_detector.txt",),
+            )
+            report = self._validate(tuple(inputs))
+            self.assertEqual(
+                {issue.code for issue in report.errors},
+                {
+                    "restore_detector_missing_in_calibration",
+                    "restore_detector_missing_in_darl",
+                    "missing_darl_detector_bins",
+                },
             )
 
 

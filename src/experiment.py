@@ -177,6 +177,10 @@ class Experiment:
         return self.output_dir / "darl"
 
     @property
+    def darl_result_file(self) -> Path:
+        return self.darl_output_dir / "result.yaml"
+
+    @property
     def matrix_output_dir(self) -> Path:
         return self.darl_output_dir / "matrix"
 

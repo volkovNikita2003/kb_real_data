@@ -49,6 +49,7 @@ class ParameterExamplesTests(unittest.TestCase):
         self.assertEqual(darl.particle_classes.max_diameter_nm, 3500000.0)
         self.assertEqual(measurement.expected_distribution.mean_nm, 15000.0)
         self.assertEqual(restore.solver.regularization_alpha, "best")
+        self.assertFalse(restore.solver.use_w_critical)
 
 
 if __name__ == "__main__":

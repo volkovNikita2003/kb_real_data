@@ -21,6 +21,7 @@ from parameters import (
     load_darl_parameters,
     load_general_parameters,
     load_measurement_parameters,
+    load_restore_parameters,
     write_used_parameters,
 )
 from calibration.refactoring.result import (
@@ -286,6 +287,121 @@ class CalibrationParametersTests(unittest.TestCase):
 
             self.assertEqual(result.line_sensor.pinhole_position_m, 0.0001)
             self.assertEqual(result.line_sensor.signal_position_m, 0.0201)
+
+
+class RestoreParametersTests(unittest.TestCase):
+    def test_detector_processing_defaults_match_legacy_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "default.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "detectors": {"camera": {}, "line_sensor": {}},
+                },
+            )
+
+            result = load_restore_parameters(path)
+
+            self.assertTrue(result.detectors.camera.use_background)
+            self.assertEqual(result.detectors.camera.hdr.mode, "l2h")
+            self.assertEqual(
+                result.detectors.camera.hdr.difference_mode, "after_hdr"
+            )
+            self.assertEqual(result.detectors.camera.hdr.low_threshold, 10.0)
+            self.assertEqual(result.detectors.camera.hdr.top_threshold, 240.0)
+            self.assertFalse(result.detectors.camera.hdr.filtered)
+            self.assertEqual(result.detectors.camera.hdr.gaussian_sigma, 5.0)
+            self.assertEqual(result.detectors.line_sensor.signal_mode, 2)
+            self.assertEqual(result.detectors.line_sensor.time_offset_us, 2.0)
+            self.assertFalse(result.solver.use_w_critical)
+
+    def test_complete_detector_processing_settings_are_loaded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "custom.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "detectors": {
+                        "camera": {
+                            "use_background": False,
+                            "hdr": {
+                                "mode": "l2h_longest",
+                                "difference_mode": "per_exposure",
+                                "background_level": 8,
+                                "low_threshold": 4,
+                                "top_threshold": 200,
+                                "filtered": True,
+                                "gaussian_sigma": 3,
+                            },
+                        },
+                        "line_sensor": {
+                            "use_background": False,
+                            "signal_mode": 1,
+                            "time_offset_us": 0,
+                        },
+                    },
+                    "solver": {"use_w_critical": True},
+                },
+            )
+
+            result = load_restore_parameters(path)
+
+            self.assertEqual(result.detectors.camera.hdr.mode, "l2h_longest")
+            self.assertEqual(
+                result.detectors.camera.hdr.difference_mode, "per_exposure"
+            )
+            self.assertEqual(result.detectors.camera.hdr.top_threshold, 200.0)
+            self.assertTrue(result.detectors.camera.hdr.filtered)
+            self.assertEqual(result.detectors.line_sensor.signal_mode, 1)
+            self.assertEqual(result.detectors.line_sensor.time_offset_us, 0.0)
+            self.assertTrue(result.solver.use_w_critical)
+
+    def test_invalid_hdr_thresholds_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.yaml"
+            for hdr, message in (
+                ({"low_threshold": 20, "top_threshold": 20}, "должен быть меньше"),
+                ({"top_threshold": 256}, "не может превышать 255"),
+            ):
+                with self.subTest(hdr=hdr):
+                    dump(
+                        path,
+                        {
+                            "schema_version": 1,
+                            "detectors": {"camera": {"hdr": hdr}},
+                        },
+                    )
+                    with self.assertRaisesRegex(ParametersError, message):
+                        load_restore_parameters(path)
+
+    def test_invalid_line_signal_mode_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "detectors": {"line_sensor": {"signal_mode": 3}},
+                },
+            )
+            with self.assertRaisesRegex(ParametersError, "допустимо 1 или 2"):
+                load_restore_parameters(path)
+
+    def test_use_w_critical_is_strict_boolean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "detectors": {"camera": {}},
+                    "solver": {"use_w_critical": 1},
+                },
+            )
+            with self.assertRaisesRegex(ParametersError, "логическое значение"):
+                load_restore_parameters(path)
 
 
 class EffectiveParametersTests(unittest.TestCase):

@@ -7,12 +7,15 @@ from pathlib import Path
 import re
 from typing import Iterable, Literal, Sequence
 
+from calibration.refactoring.result import CalibrationResult
+from darl.result import DarlResult
 from errors import ExperimentStructureError, ParametersError
 from experiment import Experiment, Measurement, RestoreProfile, validate_safe_name
 from parameters import (
     CalibrationStageParameters,
     DarlStageParameters,
     ExperimentParameters,
+    GeneralParameters,
     RestoreParameters,
     load_measurement_parameters,
 )
@@ -152,6 +155,7 @@ def _scan_exposure_directory(
     report: _ReportBuilder,
     *,
     measurement: str | None = None,
+    restore_profile: str | None = None,
 ) -> dict[int, Path] | None:
     if not directory.exists() or not directory.is_dir():
         return None
@@ -164,6 +168,7 @@ def _scan_exposure_directory(
                 f"В каталоге детектора разрешены только файлы: {entry}",
                 path=entry,
                 measurement=measurement,
+                restore_profile=restore_profile,
             )
             continue
         try:
@@ -175,6 +180,7 @@ def _scan_exposure_directory(
                 str(error),
                 path=entry,
                 measurement=measurement,
+                restore_profile=restore_profile,
             )
             continue
         exposures[exposure] = entry
@@ -323,8 +329,10 @@ class _MeasurementData:
 
 def _validate_measurement_base(
     measurement: Measurement,
-    parameters: ExperimentParameters,
+    detector_names: Iterable[str],
     report: _ReportBuilder,
+    *,
+    restore_profile: str | None = None,
 ) -> _MeasurementData:
     for entry in sorted(measurement.path.iterdir(), key=lambda item: item.name):
         if entry.name not in ALLOWED_MEASUREMENT_DIRECTORIES:
@@ -344,7 +352,7 @@ def _validate_measurement_base(
                 measurement=measurement.name,
             )
 
-    detectors = parameters.general.detectors.names()
+    detectors = frozenset(detector_names)
     signal_specs = (
         (
             "camera",
@@ -367,6 +375,7 @@ def _validate_measurement_base(
                     f"{signal_directory}"
                 ),
                 measurement=measurement.name,
+                restore_profile=restore_profile,
             )
         else:
             for directory in directories:
@@ -377,25 +386,30 @@ def _validate_measurement_base(
                         f"Детектор {name} не используется, но его данные существуют",
                         path=directory,
                         measurement=measurement.name,
+                        restore_profile=restore_profile,
                     )
 
     camera = _scan_exposure_directory(
-        measurement.camera_dir, ".bmp", report, measurement=measurement.name
+        measurement.camera_dir, ".bmp", report,
+        measurement=measurement.name, restore_profile=restore_profile,
     )
     camera_background = _scan_exposure_directory(
         measurement.camera_background_dir,
         ".bmp",
         report,
         measurement=measurement.name,
+        restore_profile=restore_profile,
     )
     line = _scan_exposure_directory(
-        measurement.line_dir, ".txt", report, measurement=measurement.name
+        measurement.line_dir, ".txt", report,
+        measurement=measurement.name, restore_profile=restore_profile,
     )
     line_background = _scan_exposure_directory(
         measurement.line_background_dir,
         ".txt",
         report,
         measurement=measurement.name,
+        restore_profile=restore_profile,
     )
 
     if "camera" in detectors and camera is not None and not camera:
@@ -405,6 +419,7 @@ def _validate_measurement_base(
             "Каталог сигнала камеры не содержит корректных экспозиций",
             path=measurement.camera_dir,
             measurement=measurement.name,
+            restore_profile=restore_profile,
         )
     if "line_sensor" in detectors and line is not None and len(line) != 1:
         report.add(
@@ -413,6 +428,7 @@ def _validate_measurement_base(
             "Каталог сигнала линейки должен содержать ровно один TXT-файл",
             path=measurement.line_dir,
             measurement=measurement.name,
+            restore_profile=restore_profile,
         )
     return _MeasurementData(
         measurement, camera, camera_background, line, line_background
@@ -588,7 +604,9 @@ def validate_experiment(
 
     for name in selected_measurements:
         measurement = experiment.measurement(name)
-        data = _validate_measurement_base(measurement, parameters, report)
+        data = _validate_measurement_base(
+            measurement, parameters.general.detectors.names(), report
+        )
         for profile_name, restore in loaded_profiles.items():
             profile = profile_by_name[profile_name]
             _validate_camera_pair(data, profile, restore, report)
@@ -650,5 +668,183 @@ def validate_darl_inputs(
             "missing_code_git_configs_directory",
             "Не найдена директория legacy-конфигураций code_git/data/configs",
             path=code_git / "data/configs",
+        )
+    return report.build()
+
+
+def _validate_darl_artifact(
+    experiment: Experiment,
+    relative_path: str,
+    report: _ReportBuilder,
+    *,
+    code: str,
+    location: str,
+    measurement: str,
+    restore_profile: str,
+) -> None:
+    root = experiment.darl_output_dir.resolve()
+    candidate = (root / relative_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        report.add(
+            "error", code,
+            f"{location}: путь выходит за пределы output/darl",
+            path=candidate,
+            measurement=measurement,
+            restore_profile=restore_profile,
+        )
+        return
+    if not candidate.is_file():
+        report.add(
+            "error", code,
+            f"{location}: не найден обязательный файл",
+            path=candidate,
+            measurement=measurement,
+            restore_profile=restore_profile,
+        )
+
+
+def validate_restore_inputs(
+    experiment: Experiment,
+    *,
+    measurement: Measurement,
+    profile: RestoreProfile,
+    general: GeneralParameters,
+    restore: RestoreParameters,
+    calibration: CalibrationResult,
+    darl: DarlResult,
+) -> ValidationReport:
+    """Validate one independent profile/measurement restoration run."""
+    report = _ReportBuilder()
+    detectors = restore.detectors.names()
+    context = {
+        "measurement": measurement.name,
+        "restore_profile": profile.name,
+    }
+
+    if measurement.path.resolve() != (
+        experiment.data_dir / measurement.name
+    ).resolve():
+        report.add(
+            "error", "foreign_measurement",
+            "Измерение не принадлежит переданному эксперименту",
+            path=measurement.path, **context,
+        )
+    if profile.path.resolve() != (
+        experiment.restore_profiles_dir / f"{profile.name}.yaml"
+    ).resolve():
+        report.add(
+            "error", "foreign_restore_profile",
+            "Профиль восстановления не принадлежит переданному эксперименту",
+            path=profile.path, **context,
+        )
+
+    if not detectors:
+        report.add(
+            "error", "no_restore_detectors",
+            "Профиль восстановления не содержит детекторов", **context,
+        )
+    if "camera" not in detectors:
+        report.add(
+            "error", "unsupported_restore_detectors",
+            "Legacy-восстановление пока поддерживает только профили с камерой",
+            path=profile.path, **context,
+        )
+
+    general_detectors = general.detectors.names()
+    missing_general = detectors - general_detectors
+    if missing_general:
+        report.add(
+            "error", "restore_detector_missing_in_general",
+            "Профиль использует отсутствующие в general.yaml детекторы: "
+            + ", ".join(sorted(missing_general)),
+            path=profile.path, **context,
+        )
+
+    calibrated = {"camera"}
+    if calibration.line_sensor is not None:
+        calibrated.add("line_sensor")
+    missing_calibration = detectors - calibrated
+    if missing_calibration:
+        report.add(
+            "error", "restore_detector_missing_in_calibration",
+            "Для детекторов отсутствуют результаты калибровки: "
+            + ", ".join(sorted(missing_calibration)),
+            path=experiment.calibration_result_file, **context,
+        )
+
+    missing_darl = detectors - set(darl.detectors)
+    if missing_darl:
+        report.add(
+            "error", "restore_detector_missing_in_darl",
+            "В результате DARL отсутствуют детекторы: "
+            + ", ".join(sorted(missing_darl)),
+            path=experiment.darl_result_file, **context,
+        )
+
+    data = _validate_measurement_base(
+        measurement, detectors, report, restore_profile=profile.name
+    )
+    _validate_camera_pair(data, profile, restore, report)
+    _validate_line_pair(data, profile, restore, report)
+
+    artifacts = (
+        (darl.matrix_file, "missing_darl_matrix", "darl.result.matrix_file"),
+        (
+            darl.particle_classes_file,
+            "missing_darl_particle_classes",
+            "darl.result.particle_classes_file",
+        ),
+    )
+    for relative_path, code, location in artifacts:
+        _validate_darl_artifact(
+            experiment, relative_path, report, code=code, location=location,
+            **context,
+        )
+
+    detector_bin_names = {
+        "camera": "bins_front_detector.txt",
+        "line_sensor": "FrontDetectorLogLine_detector.txt",
+    }
+    available_bins = set(darl.detector_bin_files)
+    for detector in sorted(detectors & detector_bin_names.keys()):
+        filename = detector_bin_names[detector]
+        if filename not in available_bins:
+            report.add(
+                "error", "missing_darl_detector_bins",
+                f"В result.yaml не указан файл бинов детектора {detector}",
+                path=experiment.darl_result_file, **context,
+            )
+            continue
+        _validate_darl_artifact(
+            experiment, filename, report,
+            code="missing_darl_detector_bins",
+            location=f"darl.result.detector_bin_files.{detector}",
+            **context,
+        )
+
+    expected = [item for item in darl.distributions if item.name == measurement.name]
+    if not expected:
+        report.add(
+            "warning", "missing_expected_signal",
+            "Для измерения нет смоделированного ожидаемого сигнала; "
+            "сравнение сигналов будет пропущено",
+            path=experiment.darl_result_file, **context,
+        )
+    elif len(expected) > 1:
+        report.add(
+            "error", "duplicate_expected_signal",
+            "В result.yaml несколько ожидаемых сигналов с именем измерения",
+            path=experiment.darl_result_file, **context,
+        )
+    else:
+        _validate_darl_artifact(
+            experiment, expected[0].modeled_signal, report,
+            code="missing_expected_signal_file",
+            location=(
+                f"darl.result.distributions.{measurement.name}.modeled_signal"
+            ),
+            **context,
         )
     return report.build()

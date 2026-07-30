@@ -15,3 +15,7 @@ class OutputError(RuntimeError):
 
 class DarlError(RuntimeError):
     """Base class for failures of the DARL modeling stage."""
+
+
+class RestorationError(RuntimeError):
+    """Base class for failures of the restoration stage."""

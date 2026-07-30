@@ -8,6 +8,7 @@ solver:
   type: tikhonov_nnls
   regularization_order: 1
   regularization_alpha: best
+  use_w_critical: false
   use_chahine: true
   use_concentration_correction: true
 class_slice:

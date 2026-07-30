@@ -181,10 +181,23 @@ schema_version: 1
 detectors:
   camera:
     use_background: true
+    hdr:
+      mode: l2h
+      difference_mode: after_hdr
+      background_level: 12
+      low_threshold: 10
+      top_threshold: 240
+      filtered: false
+      gaussian_sigma: 5
+  line_sensor:
+    use_background: true
+    signal_mode: 2
+    time_offset_us: 2
 solver:
   type: tikhonov_nnls
   regularization_order: 1
   regularization_alpha: best
+  use_w_critical: false
   use_chahine: true
   use_concentration_correction: true
 class_slice:
@@ -193,6 +206,15 @@ class_slice:
 ```
 
 `regularization_alpha` принимает `best` или положительное число.
+`use_w_critical` включает отсечение малых весовых долей по legacy-порогу и по
+умолчанию выключен для совпадения с эталонными восстановлениями.
+
+Секции `camera.hdr` и параметры линейки необязательны. Допустимые режимы HDR:
+`l2h`/`l2h_longest` и `after_hdr`/`per_exposure`. Пороговые значения должны
+находиться в диапазоне от 0 до 255, причём `low_threshold < top_threshold`.
+`line_sensor.signal_mode` принимает 1 или 2, а `time_offset_us` должен быть
+неотрицательным. Все отсутствующие значения раскрываются в
+`used-parameters.yaml`.
 
 ## Фактически использованные параметры
 
@@ -204,6 +226,15 @@ class_slice:
 `effective_quality_control()`, `effective_expected_signal()` и
 `effective_restore()` создают полные словари соответствующих запусков. Они
 включают значения по умолчанию и результаты предыдущих этапов.
+
+CLI восстановления не загружает полный `ExperimentParameters`: его входами
+служат только `general.yaml`, выбранный restore profile,
+`calibration/result.yaml`, `darl/result.yaml` и данные выбранного измерения.
+Для каждой пары он формирует собственный полный `used-parameters.yaml`, где
+сохраняются нормализованный профиль, фактические экспозиции и пути сигналов,
+оба входных результата предыдущих этапов и все раскрытые значения по
+умолчанию. Поэтому изменение исходных `calibration.yaml` или `darl.yaml` после
+публикации результатов не меняет вход восстановления.
 
 Функция `write_used_parameters()` сохраняет такой словарь как безопасный YAML.
 Существующий файл она не перезаписывает; управление `--force` и архивированием

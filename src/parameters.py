@@ -688,16 +688,37 @@ def load_measurement_parameters(
 
 
 @dataclass(frozen=True)
-class RestoreDetector:
+class RestoreCameraHdrParameters:
+    mode: str = "l2h"
+    difference_mode: str = "after_hdr"
+    background_level: float = 12.0
+    low_threshold: float = 10.0
+    top_threshold: float = 240.0
+    filtered: bool = False
+    gaussian_sigma: float = 5.0
+
+
+@dataclass(frozen=True)
+class RestoreCameraDetector:
     use_background: bool = True
+    hdr: RestoreCameraHdrParameters = field(
+        default_factory=RestoreCameraHdrParameters
+    )
+
+
+@dataclass(frozen=True)
+class RestoreLineSensorDetector:
+    use_background: bool = True
+    signal_mode: int = 2
+    time_offset_us: float = 2.0
 
 
 @dataclass(frozen=True)
 class RestoreDetectors:
-    camera: RestoreDetector | None = field(
+    camera: RestoreCameraDetector | None = field(
         default=None, metadata={YAML_OMIT_NONE: True}
     )
-    line_sensor: RestoreDetector | None = field(
+    line_sensor: RestoreLineSensorDetector | None = field(
         default=None, metadata={YAML_OMIT_NONE: True}
     )
 
@@ -714,6 +735,7 @@ class SolverParameters:
     type: str = "tikhonov_nnls"
     regularization_order: int = 1
     regularization_alpha: str | float = "best"
+    use_w_critical: bool = False
     use_chahine: bool = True
     use_concentration_correction: bool = True
 
@@ -748,24 +770,114 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
         optional={"camera", "line_sensor"},
     )
 
-    def restore_detector(name: str) -> RestoreDetector | None:
-        if name not in detector_data:
-            return None
+    camera = None
+    if "camera" in detector_data:
+        camera_path = f"{prefix}.detectors.camera"
         data = _fields(
-            detector_data[name],
-            f"{prefix}.detectors.{name}",
-            optional={"use_background"},
+            detector_data["camera"],
+            camera_path,
+            optional={"use_background", "hdr"},
         )
-        return RestoreDetector(
-            _boolean(
-                data.get("use_background", True),
-                f"{prefix}.detectors.{name}.use_background",
+        hdr_path = f"{camera_path}.hdr"
+        hdr_data = _fields(
+            data.get("hdr", {}),
+            hdr_path,
+            optional={
+                "mode", "difference_mode", "background_level",
+                "low_threshold", "top_threshold", "filtered",
+                "gaussian_sigma",
+            },
+        )
+        background_level = _number(
+            hdr_data.get("background_level", 12.0),
+            f"{hdr_path}.background_level",
+            non_negative=True,
+        )
+        low_threshold = _number(
+            hdr_data.get("low_threshold", 10.0),
+            f"{hdr_path}.low_threshold",
+            non_negative=True,
+        )
+        top_threshold = _number(
+            hdr_data.get("top_threshold", 240.0),
+            f"{hdr_path}.top_threshold",
+            positive=True,
+        )
+        for name, value in (
+            ("background_level", background_level),
+            ("low_threshold", low_threshold),
+            ("top_threshold", top_threshold),
+        ):
+            if value > 255:
+                raise ParametersError(
+                    f"{hdr_path}.{name}: значение не может превышать 255"
+                )
+        if low_threshold >= top_threshold:
+            raise ParametersError(
+                f"{hdr_path}: low_threshold должен быть меньше top_threshold"
             )
+        camera = RestoreCameraDetector(
+            use_background=_boolean(
+                data.get("use_background", True),
+                f"{camera_path}.use_background",
+            ),
+            hdr=RestoreCameraHdrParameters(
+                mode=_choice(
+                    hdr_data.get("mode", "l2h"),
+                    f"{hdr_path}.mode",
+                    {"l2h", "l2h_longest"},
+                ),
+                difference_mode=_choice(
+                    hdr_data.get("difference_mode", "after_hdr"),
+                    f"{hdr_path}.difference_mode",
+                    {"after_hdr", "per_exposure"},
+                ),
+                background_level=background_level,
+                low_threshold=low_threshold,
+                top_threshold=top_threshold,
+                filtered=_boolean(
+                    hdr_data.get("filtered", False),
+                    f"{hdr_path}.filtered",
+                ),
+                gaussian_sigma=_number(
+                    hdr_data.get("gaussian_sigma", 5.0),
+                    f"{hdr_path}.gaussian_sigma",
+                    positive=True,
+                ),
+            ),
+        )
+
+    line_sensor = None
+    if "line_sensor" in detector_data:
+        line_path = f"{prefix}.detectors.line_sensor"
+        data = _fields(
+            detector_data["line_sensor"],
+            line_path,
+            optional={"use_background", "signal_mode", "time_offset_us"},
+        )
+        signal_mode = _integer(
+            data.get("signal_mode", 2), f"{line_path}.signal_mode"
+        )
+        if signal_mode not in (1, 2):
+            raise ParametersError(
+                f"{line_path}.signal_mode: допустимо 1 или 2"
+            )
+        line_sensor = RestoreLineSensorDetector(
+            use_background=_boolean(
+                data.get("use_background", True),
+                f"{line_path}.use_background",
+            ),
+            signal_mode=signal_mode,
+            time_offset_us=_number(
+                data.get("time_offset_us", 2.0),
+                f"{line_path}.time_offset_us",
+                non_negative=True,
+            ),
         )
 
     detectors = RestoreDetectors(
-        restore_detector("camera"),
-        restore_detector("line_sensor"),
+        camera,
+        line_sensor,
     )
     if not detectors.names():
         raise ParametersError(f"{prefix}.detectors: должен быть указан хотя бы один детектор")
@@ -777,6 +889,7 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
             "type",
             "regularization_order",
             "regularization_alpha",
+            "use_w_critical",
             "use_chahine",
             "use_concentration_correction",
         },
@@ -805,6 +918,10 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
             f"{prefix}.solver.regularization_order",
         ),
         regularization_alpha=alpha,
+        use_w_critical=_boolean(
+            solver_data.get("use_w_critical", False),
+            f"{prefix}.solver.use_w_critical",
+        ),
         use_chahine=_boolean(
             solver_data.get("use_chahine", True),
             f"{prefix}.solver.use_chahine",
