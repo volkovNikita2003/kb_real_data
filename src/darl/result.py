@@ -20,6 +20,12 @@ class DarlResultError(DarlError):
 
 
 _VALIDATOR = SchemaValidator(DarlResultError)
+_DETECTOR_FILES = {
+    "camera": "bins_front_detector.txt",
+    "line_sensor": "FrontDetectorLogLine_detector.txt",
+}
+_DETECTOR_ORDER = tuple(_DETECTOR_FILES)
+_SIGNAL_VALUE_TYPES = frozenset({"signal", "intensity"})
 
 
 @dataclass(frozen=True)
@@ -30,9 +36,18 @@ class DarlDistributionResult:
 
 
 @dataclass(frozen=True)
+class DarlSignalContract:
+    """Signal semantics required to process real detector measurements."""
+
+    value_type: str
+
+
+@dataclass(frozen=True)
 class DarlResult:
     schema_version: int
     legacy_config_name: str
+    detectors: tuple[str, ...]
+    signal: DarlSignalContract
     matrix_file: str
     particle_classes_file: str
     detector_bin_files: tuple[str, ...]
@@ -43,6 +58,8 @@ class DarlResult:
         return {
             "schema_version": self.schema_version,
             "legacy_config_name": self.legacy_config_name,
+            "detectors": list(self.detectors),
+            "signal": {"value_type": self.signal.value_type},
             "matrix_file": self.matrix_file,
             "particle_classes_file": self.particle_classes_file,
             "detector_bin_files": list(self.detector_bin_files),
@@ -57,49 +74,35 @@ class DarlResult:
         }
 
 
-def collect_darl_result(
-    directory: str | Path,
-    *,
-    legacy_config_name: str,
+def _detector_contract(
     detector_names: Iterable[str],
-    distribution_names: tuple[str, ...],
-) -> DarlResult:
-    """Validate mandatory legacy artifacts and describe all generated files."""
-    root = Path(directory)
-    matrices = sorted(path.name for path in root.glob("matrix-*.npz"))
-    if len(matrices) != 1:
+    detector_bin_files: Iterable[str],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    detectors_input = tuple(detector_names)
+    if not detectors_input:
         raise DarlResultError(
-            f"Ожидался один файл аппаратной матрицы, найдено {len(matrices)}"
+            "detectors: должен быть указан хотя бы один детектор"
         )
-    particle_classes = sorted(
-        path.name for path in root.glob("particle_classes_lasser_*.txt")
-    )
-    if len(particle_classes) != 1:
-        raise DarlResultError(
-            "Ожидался один файл классов частиц, найдено "
-            f"{len(particle_classes)}"
-        )
-    detector_files = {
-        "camera": "bins_front_detector.txt",
-        "line_sensor": "FrontDetectorLogLine_detector.txt",
-    }
-    detectors = frozenset(detector_names)
-    unknown_detectors = detectors - detector_files.keys()
+    detectors_set = set(detectors_input)
+    if len(detectors_input) != len(detectors_set):
+        raise DarlResultError("detectors: имена не должны повторяться")
+    unknown_detectors = detectors_set - _DETECTOR_FILES.keys()
     if unknown_detectors:
         raise DarlResultError(
             "Неизвестные детекторы при проверке результата DARL: "
             + ", ".join(sorted(unknown_detectors))
         )
-    expected_bin_files = {
-        detector_files[name] for name in detectors
-    }
-    actual_bin_files = {
-        path.name for path in root.iterdir()
-        if path.is_file() and (
-            path.name.startswith("bins_")
-            or path.name.endswith("_detector.txt")
+    detectors = tuple(
+        name for name in _DETECTOR_ORDER if name in detectors_set
+    )
+
+    bins_input = tuple(detector_bin_files)
+    actual_bin_files = set(bins_input)
+    if len(bins_input) != len(actual_bin_files):
+        raise DarlResultError(
+            "detector_bin_files: имена файлов не должны повторяться"
         )
-    }
+    expected_bin_files = {_DETECTOR_FILES[name] for name in detectors}
     missing_bin_files = expected_bin_files - actual_bin_files
     unexpected_bin_files = actual_bin_files - expected_bin_files
     if missing_bin_files or unexpected_bin_files:
@@ -117,7 +120,47 @@ def collect_darl_result(
             + "; ".join(details)
             + ")"
         )
-    bin_files = tuple(sorted(actual_bin_files))
+    return detectors, tuple(sorted(actual_bin_files))
+
+
+def collect_darl_result(
+    directory: str | Path,
+    *,
+    legacy_config_name: str,
+    detector_names: Iterable[str],
+    signal_value_type: str,
+    distribution_names: tuple[str, ...],
+) -> DarlResult:
+    """Validate mandatory legacy artifacts and describe all generated files."""
+    root = Path(directory)
+    matrices = sorted(path.name for path in root.glob("matrix-*.npz"))
+    if len(matrices) != 1:
+        raise DarlResultError(
+            f"Ожидался один файл аппаратной матрицы, найдено {len(matrices)}"
+        )
+    particle_classes = sorted(
+        path.name for path in root.glob("particle_classes_lasser_*.txt")
+    )
+    if len(particle_classes) != 1:
+        raise DarlResultError(
+            "Ожидался один файл классов частиц, найдено "
+            f"{len(particle_classes)}"
+        )
+    actual_bin_files = {
+        path.name for path in root.iterdir()
+        if path.is_file() and (
+            path.name.startswith("bins_")
+            or path.name.endswith("_detector.txt")
+        )
+    }
+    detectors, bin_files = _detector_contract(
+        detector_names, actual_bin_files
+    )
+    if signal_value_type not in _SIGNAL_VALUE_TYPES:
+        raise DarlResultError(
+            "signal.value_type: ожидалось одно из: "
+            + ", ".join(sorted(_SIGNAL_VALUE_TYPES))
+        )
     background_files = tuple(sorted(
         path.name for path in root.glob("background_signal_laser_*.txt")
     ))
@@ -144,6 +187,8 @@ def collect_darl_result(
     return DarlResult(
         schema_version=RESULT_SCHEMA_VERSION,
         legacy_config_name=legacy_config_name,
+        detectors=detectors,
+        signal=DarlSignalContract(signal_value_type),
         matrix_file=matrices[0],
         particle_classes_file=particle_classes[0],
         detector_bin_files=bin_files,
@@ -171,7 +216,8 @@ def load_darl_result(path: str | Path) -> DarlResult:
         value,
         "result.yaml",
         required={
-            "schema_version", "legacy_config_name", "matrix_file",
+            "schema_version", "legacy_config_name", "detectors", "signal",
+            "matrix_file",
             "particle_classes_file",
             "detector_bin_files", "background_signal_files", "distributions",
         },
@@ -192,25 +238,18 @@ def load_darl_result(path: str | Path) -> DarlResult:
             raise DarlResultError(f"{location}: ожидался список непустых строк")
         return tuple(value)
 
-    detector_bins = strings(fields["detector_bin_files"], "detector_bin_files")
-    if not detector_bins:
-        raise DarlResultError(
-            "detector_bin_files: должен быть указан хотя бы один файл"
-        )
-    allowed_detector_bins = {
-        "bins_front_detector.txt",
-        "FrontDetectorLogLine_detector.txt",
-    }
-    unknown_detector_bins = set(detector_bins) - allowed_detector_bins
-    if unknown_detector_bins:
-        raise DarlResultError(
-            "detector_bin_files: неизвестные файлы: "
-            + ", ".join(sorted(unknown_detector_bins))
-        )
-    if len(detector_bins) != len(set(detector_bins)):
-        raise DarlResultError(
-            "detector_bin_files: имена файлов не должны повторяться"
-        )
+    detectors, detector_bins = _detector_contract(
+        strings(fields["detectors"], "detectors"),
+        strings(fields["detector_bin_files"], "detector_bin_files"),
+    )
+    signal_fields = _VALIDATOR.fields(
+        fields["signal"], "signal", required={"value_type"}
+    )
+    signal_value_type = _VALIDATOR.choice(
+        signal_fields["value_type"],
+        "signal.value_type",
+        _SIGNAL_VALUE_TYPES,
+    )
     backgrounds = strings(
         fields["background_signal_files"], "background_signal_files"
     )
@@ -239,6 +278,7 @@ def load_darl_result(path: str | Path) -> DarlResult:
         ))
     return DarlResult(
         fields["schema_version"], fields["legacy_config_name"],
+        detectors, DarlSignalContract(signal_value_type),
         fields["matrix_file"], fields["particle_classes_file"],
         detector_bins, backgrounds, tuple(distributions),
     )

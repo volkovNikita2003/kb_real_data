@@ -122,6 +122,7 @@ def run(
             directory,
             legacy_config_name=config.config_name,
             detector_names=parameters.general.detectors.names(),
+            signal_value_type=parameters.darl.signal.value_type,
             distribution_names=tuple(item.name for item in parameters.distributions),
         )
         write_used_parameters(

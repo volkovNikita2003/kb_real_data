@@ -38,11 +38,14 @@ class DarlResultTests(unittest.TestCase):
                 root,
                 legacy_config_name="auto_test",
                 detector_names=("camera", "line_sensor"),
+                signal_value_type="signal",
                 distribution_names=("pinhole_200", "sample"),
             )
             save_darl_result(result, root / "result.yaml")
             self.assertEqual(load_darl_result(root / "result.yaml"), result)
             self.assertEqual(result.matrix_file, "matrix-case.npz")
+            self.assertEqual(result.detectors, ("camera", "line_sensor"))
+            self.assertEqual(result.signal.value_type, "signal")
             self.assertEqual(
                 result.particle_classes_file,
                 "particle_classes_lasser_0.txt",
@@ -65,6 +68,7 @@ class DarlResultTests(unittest.TestCase):
                     root,
                     legacy_config_name="auto_test",
                     detector_names=("camera", "line_sensor"),
+                    signal_value_type="signal",
                     distribution_names=("pinhole_200", "sample"),
                 )
 
@@ -80,6 +84,7 @@ class DarlResultTests(unittest.TestCase):
                     root,
                     legacy_config_name="auto_test",
                     detector_names=("camera", "line_sensor"),
+                    signal_value_type="signal",
                     distribution_names=("pinhole_200", "sample"),
                 )
 
@@ -89,6 +94,7 @@ class DarlResultTests(unittest.TestCase):
                     root,
                     legacy_config_name="auto_test",
                     detector_names=("camera",),
+                    signal_value_type="signal",
                     distribution_names=("pinhole_200", "sample"),
                 )
 
@@ -96,7 +102,9 @@ class DarlResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "result.yaml"
             path.write_text(
-                "schema_version: 1\nlegacy_config_name: a\nmatrix_file: m\n"
+                "schema_version: 1\nlegacy_config_name: a\n"
+                "detectors: [camera]\nsignal: {value_type: signal}\n"
+                "matrix_file: m\n"
                 "particle_classes_file: classes.txt\n"
                 "detector_bin_files: []\nbackground_signal_files: []\n"
                 "distributions: {}\nunknown: true\n",
@@ -109,7 +117,9 @@ class DarlResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "result.yaml"
             base = (
-                "schema_version: 1\nlegacy_config_name: a\nmatrix_file: m\n"
+                "schema_version: 1\nlegacy_config_name: a\n"
+                "detectors: [camera]\nsignal: {value_type: signal}\n"
+                "matrix_file: m\n"
                 "particle_classes_file: classes.txt\n"
                 "background_signal_files: [background.txt]\n"
                 "distributions: {}\n"
@@ -117,7 +127,9 @@ class DarlResultTests(unittest.TestCase):
             path.write_text(
                 base + "detector_bin_files: []\n", encoding="utf-8"
             )
-            with self.assertRaisesRegex(DarlResultError, "хотя бы один"):
+            with self.assertRaisesRegex(
+                DarlResultError, "bins_front_detector.txt"
+            ):
                 load_darl_result(path)
 
             path.write_text(
@@ -126,3 +138,16 @@ class DarlResultTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(DarlResultError, "unknown.txt"):
                 load_darl_result(path)
+
+    def test_signal_contract_is_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            with self.assertRaisesRegex(DarlResultError, "signal.value_type"):
+                collect_darl_result(
+                    root,
+                    legacy_config_name="auto_test",
+                    detector_names=("camera", "line_sensor"),
+                    signal_value_type="unknown",
+                    distribution_names=("pinhole_200", "sample"),
+                )
