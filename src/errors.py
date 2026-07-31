@@ -19,3 +19,7 @@ class DarlError(RuntimeError):
 
 class RestorationError(RuntimeError):
     """Base class for failures of the restoration stage."""
+
+
+class PipelineError(RuntimeError):
+    """A processing stage cannot be orchestrated or must not be started."""

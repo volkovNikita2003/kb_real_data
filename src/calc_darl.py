@@ -19,7 +19,6 @@ from experiment import Experiment
 from output import prepare_output_directory
 from parameters import DarlStageParameters, write_used_parameters
 from validate import format_report
-from validation import validate_darl_inputs
 
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -135,18 +134,16 @@ def run(
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        from pipeline import run_darl_stage
+
         experiment = Experiment.open(args.experiment)
-        parameters = DarlStageParameters.load(experiment)
-        code_git = default_code_git_dir()
-        report = validate_darl_inputs(
-            experiment, parameters, code_git_dir=code_git
-        )
-        print(format_report(report, show_warnings=not args.no_warnings))
-        if report.errors or (args.warnings_as_errors and report.warnings):
-            return 1
-        run(
-            experiment, parameters, force=args.force,
-            code_git_dir=code_git,
+        result = run_darl_stage(
+            experiment,
+            force=args.force,
+            warnings_as_errors=args.warnings_as_errors,
+            report_callback=lambda _stage, report: print(format_report(
+                report, show_warnings=not args.no_warnings
+            )),
         )
     except ExperimentStructureError as error:
         print(f"ERROR: {error}", file=sys.stderr)
@@ -157,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    print(f"Результаты DARL сохранены: {experiment.darl_output_dir}")
+    print(f"Результаты DARL сохранены: {result.output_paths[0]}")
     return 0
 
 

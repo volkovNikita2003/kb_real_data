@@ -13,7 +13,6 @@ from experiment import Experiment
 from output import prepare_output_directory
 from parameters import CalibrationStageParameters, write_used_parameters
 from validate import format_report
-from validation import validate_calibration_inputs
 
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -86,20 +85,24 @@ def run(experiment: Experiment, parameters: CalibrationStageParameters, *, force
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        from pipeline import run_calibration_stage
+
         experiment = Experiment.open(args.experiment)
-        parameters = CalibrationStageParameters.load(experiment)
-        report = validate_calibration_inputs(experiment, parameters)
-        print(format_report(report, show_warnings=not args.no_warnings))
-        if report.errors or (args.warnings_as_errors and report.warnings):
-            return 1
-        run(experiment, parameters, force=args.force)
+        result = run_calibration_stage(
+            experiment,
+            force=args.force,
+            warnings_as_errors=args.warnings_as_errors,
+            report_callback=lambda _stage, report: print(format_report(
+                report, show_warnings=not args.no_warnings
+            )),
+        )
     except ExperimentStructureError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
     except (ParametersError, OutputError, OSError, ValueError, RuntimeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    print(f"Калибровка сохранена: {experiment.calibration_output_dir}")
+    print(f"Калибровка сохранена: {result.output_paths[0]}")
     return 0
 
 

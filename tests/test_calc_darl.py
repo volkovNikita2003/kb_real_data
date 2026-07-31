@@ -14,6 +14,9 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 import calc_darl
+import pipeline
+from errors import ParametersError, PipelineError
+from pipeline import StageResult
 from validation import ValidationIssue, ValidationReport
 
 
@@ -65,12 +68,14 @@ class DarlCliTests(unittest.TestCase):
         self.report = ValidationReport(())
 
     def _run_main(self, *arguments: str):
+        def stage(*args, **kwargs):
+            kwargs["report_callback"]("darl", self.report)
+            if kwargs["warnings_as_errors"] and self.report.warnings:
+                raise PipelineError("warnings")
+            return StageResult("darl", (Path("/tmp/darl"),), self.report)
         with (
             patch.object(calc_darl.Experiment, "open", return_value=self.experiment),
-            patch.object(calc_darl.DarlStageParameters, "load", return_value=self.parameters),
-            patch.object(calc_darl, "default_code_git_dir", return_value=Path("/code_git")),
-            patch.object(calc_darl, "validate_darl_inputs", return_value=self.report),
-            patch.object(calc_darl, "run") as run_mock,
+            patch.object(pipeline, "run_darl_stage", side_effect=stage) as run_mock,
             redirect_stdout(StringIO()) as output,
         ):
             code = calc_darl.main(["experiment", *arguments])
@@ -79,10 +84,7 @@ class DarlCliTests(unittest.TestCase):
     def test_main_runs_loaded_experiment(self) -> None:
         code, output, run_mock = self._run_main("--force")
         self.assertEqual(code, 0)
-        run_mock.assert_called_once_with(
-            self.experiment, self.parameters, force=True,
-            code_git_dir=Path("/code_git"),
-        )
+        self.assertTrue(run_mock.call_args.kwargs["force"])
         self.assertIn("ошибок — 0", output)
         self.assertIn("/tmp/darl", output)
 
@@ -95,7 +97,7 @@ class DarlCliTests(unittest.TestCase):
         code, output, run_mock = self._run_main("--warnings-as-errors")
         self.assertEqual(code, 1)
         self.assertIn("Тестовое предупреждение", output)
-        run_mock.assert_not_called()
+        run_mock.assert_called_once()
 
         code, output, run_mock = self._run_main("--no-warnings")
         self.assertEqual(code, 0)
@@ -114,8 +116,8 @@ class DarlCliTests(unittest.TestCase):
         with (
             patch.object(calc_darl.Experiment, "open", return_value=Mock()),
             patch.object(
-                calc_darl.DarlStageParameters, "load",
-                side_effect=calc_darl.ParametersError("bad parameters"),
+                pipeline, "run_darl_stage",
+                side_effect=ParametersError("bad parameters"),
             ),
             redirect_stderr(StringIO()) as error,
         ):

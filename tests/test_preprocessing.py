@@ -12,6 +12,9 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 import preprocessing
+import pipeline
+from errors import PipelineError
+from pipeline import StageResult
 from validation import ValidationIssue, ValidationReport
 
 
@@ -25,12 +28,16 @@ class PreprocessingWarningCliTests(unittest.TestCase):
         ))
 
     def run_main(self, *arguments: str) -> tuple[int, str, Mock]:
-        run_mock = Mock()
+        def stage(*args, **kwargs):
+            kwargs["report_callback"]("calibration", self.report)
+            if kwargs["warnings_as_errors"] and self.report.warnings:
+                raise PipelineError("warnings")
+            return StageResult(
+                "calibration", (Path("/tmp/calibration"),), self.report
+            )
         with (
             patch.object(preprocessing.Experiment, "open", return_value=self.experiment),
-            patch.object(preprocessing.CalibrationStageParameters, "load", return_value=self.parameters),
-            patch.object(preprocessing, "validate_calibration_inputs", return_value=self.report),
-            patch.object(preprocessing, "run", run_mock),
+            patch.object(pipeline, "run_calibration_stage", side_effect=stage) as run_mock,
             redirect_stdout(StringIO()) as output,
         ):
             code = preprocessing.main(["experiment", *arguments])
@@ -46,7 +53,7 @@ class PreprocessingWarningCliTests(unittest.TestCase):
         code, output, run_mock = self.run_main("--warnings-as-errors")
         self.assertEqual(code, 1)
         self.assertIn("Тестовое предупреждение", output)
-        run_mock.assert_not_called()
+        run_mock.assert_called_once()
 
     def test_no_warnings_hides_details_but_runs(self) -> None:
         code, output, run_mock = self.run_main("--no-warnings")
