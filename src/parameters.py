@@ -433,7 +433,7 @@ class DarlRunDistribution:
 
 def _quality_control_distribution() -> DarlRunDistribution:
     return DarlRunDistribution(
-        name="pinhole_200",
+        name="pinhole_200_auto_control",
         source="built_in_quality_control",
         type="gaussian",
         mean_nm=200_000.0,
@@ -736,6 +736,7 @@ class SolverParameters:
     regularization_order: int = 1
     regularization_alpha: str | float = "best"
     use_w_critical: bool = False
+    w_critical: float = 1e-3
     use_chahine: bool = True
     use_concentration_correction: bool = True
 
@@ -890,6 +891,7 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
             "regularization_order",
             "regularization_alpha",
             "use_w_critical",
+            "w_critical",
             "use_chahine",
             "use_concentration_correction",
         },
@@ -921,6 +923,11 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
         use_w_critical=_boolean(
             solver_data.get("use_w_critical", False),
             f"{prefix}.solver.use_w_critical",
+        ),
+        w_critical=_number(
+            solver_data.get("w_critical", 1e-3),
+            f"{prefix}.solver.w_critical",
+            non_negative=True,
         ),
         use_chahine=_boolean(
             solver_data.get("use_chahine", True),

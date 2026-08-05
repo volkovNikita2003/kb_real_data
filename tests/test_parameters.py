@@ -315,6 +315,7 @@ class RestoreParametersTests(unittest.TestCase):
             self.assertEqual(result.detectors.line_sensor.signal_mode, 2)
             self.assertEqual(result.detectors.line_sensor.time_offset_us, 2.0)
             self.assertFalse(result.solver.use_w_critical)
+            self.assertEqual(result.solver.w_critical, 1e-3)
 
     def test_complete_detector_processing_settings_are_loaded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -342,7 +343,10 @@ class RestoreParametersTests(unittest.TestCase):
                             "time_offset_us": 0,
                         },
                     },
-                    "solver": {"use_w_critical": True},
+                    "solver": {
+                        "use_w_critical": True,
+                        "w_critical": 0.0025,
+                    },
                 },
             )
 
@@ -357,6 +361,7 @@ class RestoreParametersTests(unittest.TestCase):
             self.assertEqual(result.detectors.line_sensor.signal_mode, 1)
             self.assertEqual(result.detectors.line_sensor.time_offset_us, 0.0)
             self.assertTrue(result.solver.use_w_critical)
+            self.assertEqual(result.solver.w_critical, 0.0025)
 
     def test_invalid_hdr_thresholds_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -401,6 +406,20 @@ class RestoreParametersTests(unittest.TestCase):
                 },
             )
             with self.assertRaisesRegex(ParametersError, "логическое значение"):
+                load_restore_parameters(path)
+
+    def test_w_critical_must_be_non_negative(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "detectors": {"camera": {}},
+                    "solver": {"w_critical": -0.1},
+                },
+            )
+            with self.assertRaisesRegex(ParametersError, "не должно быть отрицательным"):
                 load_restore_parameters(path)
 
 

@@ -24,7 +24,7 @@ class LegacyRestoreSolverSettings:
 
     regularization_type: int
     regularization_alpha: str | float
-    w_critical: float = 1e-3
+    w_critical: float
 
 
 @dataclass(frozen=True)
@@ -296,6 +296,7 @@ def build_legacy_restore_config(
         solver=LegacyRestoreSolverSettings(
             regularization_type=restore.solver.regularization_order,
             regularization_alpha=restore.solver.regularization_alpha,
+            w_critical=restore.solver.w_critical,
         ),
         run_mode=run_mode,
     )

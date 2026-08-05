@@ -97,6 +97,7 @@ class LegacyRestoreConfigTests(unittest.TestCase):
                     "regularization_order": 2,
                     "regularization_alpha": 0.25,
                     "use_w_critical": True,
+                    "w_critical": 0.002,
                     "use_chahine": False,
                     "use_concentration_correction": True,
                 },
@@ -193,6 +194,7 @@ class LegacyRestoreConfigTests(unittest.TestCase):
             self.assertTrue(cfg.use_w_critical)
             self.assertEqual(artifact.solver.regularization_type, 2)
             self.assertEqual(artifact.solver.regularization_alpha, 0.25)
+            self.assertEqual(artifact.solver.w_critical, 0.002)
 
     def test_camera_only_selects_row_cut_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
