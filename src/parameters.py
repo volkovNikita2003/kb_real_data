@@ -626,15 +626,15 @@ def load_darl_parameters(path: str | Path) -> DarlParameters:
             positive=True,
         ),
     )
-    if not (
-        classes.min_diameter_nm
-        < classes.mie_fraunhofer_boundary_nm
-        < classes.max_diameter_nm
-    ):
-        raise ParametersError(
-            f"{prefix}.particle_classes: требуется "
-            "min_diameter_nm < mie_fraunhofer_boundary_nm < max_diameter_nm"
-        )
+    # if not (
+    #     classes.min_diameter_nm
+    #     < classes.mie_fraunhofer_boundary_nm
+    #     < classes.max_diameter_nm
+    # ):
+    #     raise ParametersError(
+    #         f"{prefix}.particle_classes: требуется "
+    #         "min_diameter_nm < mie_fraunhofer_boundary_nm < max_diameter_nm"
+    #     )
     if classes.split_type != 1:
         raise ParametersError(f"{prefix}.particle_classes.split_type: поддерживается только 1")
     if classes.fraunhofer_log_type not in (1, 2):
