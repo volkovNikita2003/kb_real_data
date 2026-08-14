@@ -518,7 +518,7 @@ class DarlStageParametersTests(unittest.TestCase):
             self.assertEqual(parameters.darl.detectors.names(), {"camera"})
             self.assertEqual(
                 tuple(item.name for item in parameters.distributions),
-                ("pinhole_200",),
+                ("pinhole_200_auto_control",),
             )
 
     def test_requires_calibration_result(self) -> None:
@@ -552,7 +552,7 @@ class DarlStageParametersTests(unittest.TestCase):
 
             self.assertEqual(
                 tuple(item.name for item in parameters.distributions),
-                ("pinhole_200", "aaa", "kmk_15"),
+                ("pinhole_200_auto_control", "aaa", "kmk_15"),
             )
             self.assertEqual(
                 parameters.distributions[1].parameters_file,
@@ -610,12 +610,12 @@ class DarlStageParametersTests(unittest.TestCase):
                 10,
             )
             self.assertEqual(
-                effective["distributions"]["pinhole_200"]["source"],
+                effective["distributions"]["pinhole_200_auto_control"]["source"],
                 "built_in_quality_control",
             )
             self.assertNotIn(
                 "parameters_file",
-                effective["distributions"]["pinhole_200"],
+                effective["distributions"]["pinhole_200_auto_control"],
             )
 
 

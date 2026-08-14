@@ -86,9 +86,13 @@ def _measurement_inputs(
     assert camera is not None
     result: dict[str, object] = {
         "camera": {
-            "signal_directory": str(measurement.camera_dir.relative_to(experiment.path)),
+            "signal_directory": measurement.camera_dir.relative_to(
+                experiment.path
+            ).as_posix(),
             "background_directory": (
-                str(measurement.camera_background_dir.relative_to(experiment.path))
+                measurement.camera_background_dir.relative_to(
+                    experiment.path
+                ).as_posix()
                 if camera.use_background else None
             ),
             "exposures_us": list(camera_exposures),
@@ -100,9 +104,13 @@ def _measurement_inputs(
         line_exposures = _exposures(measurement.line_dir, ".txt")
         line_exposure = line_exposures[0]
         result["line_sensor"] = {
-            "signal_directory": str(measurement.line_dir.relative_to(experiment.path)),
+            "signal_directory": measurement.line_dir.relative_to(
+                experiment.path
+            ).as_posix(),
             "background_directory": (
-                str(measurement.line_background_dir.relative_to(experiment.path))
+                measurement.line_background_dir.relative_to(
+                    experiment.path
+                ).as_posix()
                 if line.use_background else None
             ),
             "exposure_us": line_exposure,

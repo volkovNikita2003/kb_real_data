@@ -25,8 +25,9 @@ class UnifiedRunCliTests(unittest.TestCase):
         self.experiment = Mock()
 
     def test_calibration_routes_common_flags(self) -> None:
+        output_path = Path("output") / "calibration"
         result = StageResult(
-            "calibration", (Path("/output/calibration"),), EMPTY_REPORT
+            "calibration", (output_path,), EMPTY_REPORT
         )
         with (
             patch.object(run.Experiment, "open", return_value=self.experiment),
@@ -38,7 +39,7 @@ class UnifiedRunCliTests(unittest.TestCase):
             code = run.main(["calibration", "experiment", "--force"])
         self.assertEqual(code, 0)
         self.assertTrue(stage.call_args.kwargs["force"])
-        self.assertIn("/output/calibration", output.getvalue())
+        self.assertIn(str(output_path), output.getvalue())
 
     def test_restore_forwards_repeated_selectors(self) -> None:
         result = StageResult(

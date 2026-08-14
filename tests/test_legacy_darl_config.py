@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -162,8 +163,12 @@ class LegacyDarlConfigTests(unittest.TestCase):
                 write_legacy_config(code_git, "../unsafe", "value")
 
             target = configs / "auto_link.txt"
-            target.symlink_to(configs / "actual.txt")
-            with self.assertRaisesRegex(LegacyDarlConfigError, "ссылкой"):
+            with patch.object(
+                Path,
+                "is_symlink",
+                autospec=True,
+                side_effect=lambda path: path == target,
+            ), self.assertRaisesRegex(LegacyDarlConfigError, "ссылкой"):
                 write_legacy_config(code_git, "auto_link", "value")
 
     def test_build_uses_deterministic_experiment_name(self) -> None:

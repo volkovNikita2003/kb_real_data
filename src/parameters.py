@@ -1046,9 +1046,9 @@ class DarlStageParameters:
                     mean_nm=expected.mean_nm,
                     sigma_nm=expected.sigma_nm,
                     particle_count=expected.particle_count,
-                    parameters_file=str(
-                        parameters_file.path.relative_to(experiment.path)
-                    ),
+                    parameters_file=parameters_file.path.relative_to(
+                        experiment.path
+                    ).as_posix(),
                 )
             )
 

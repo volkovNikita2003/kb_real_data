@@ -18,13 +18,24 @@ class LegacyDarlReferenceTests(unittest.TestCase):
     """Compare an explicitly generated local result with the saved baseline."""
 
     def test_generated_numerical_artifacts_match_reference(self) -> None:
+        if not REFERENCE.is_dir():
+            self.skipTest("local reference data are not available")
         if not ACTUAL.is_dir():
             self.skipTest(
                 "Сначала выполните: python src/calc_darl.py "
                 "experiments/test_17_07_26_kmk_15"
             )
 
-        numerical_text = (
+        numerical_text_actual = (
+            "b_kmk_15.txt",
+            "b_pinhole_200_auto_control.txt",
+            "background_signal_laser_0.txt",
+            "bins_front_detector.txt",
+            "particle_classes_lasser_0.txt",
+            "kmk_15/modeled_signal.txt",
+            "pinhole_200_auto_control/modeled_signal.txt",
+        )
+        numerical_text_reference = (
             "b_kmk_15.txt",
             "b_pinhole_200.txt",
             "background_signal_laser_0.txt",
@@ -33,11 +44,11 @@ class LegacyDarlReferenceTests(unittest.TestCase):
             "kmk_15/modeled_signal.txt",
             "pinhole_200/modeled_signal.txt",
         )
-        for relative in numerical_text:
-            with self.subTest(path=relative):
+        for act, ref in zip(numerical_text_actual, numerical_text_reference):
+            with self.subTest(path=ref):
                 np.testing.assert_array_equal(
-                    np.loadtxt(ACTUAL / relative),
-                    np.loadtxt(REFERENCE / relative),
+                    np.loadtxt(ACTUAL / act),
+                    np.loadtxt(REFERENCE / ref),
                 )
 
         self.assertEqual(

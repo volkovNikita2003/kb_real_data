@@ -267,7 +267,7 @@ def collect_restore_result(
         required=expected_signal_comparison,
     )
     figures = tuple(sorted(
-        str(path.relative_to(root))
+        path.relative_to(root).as_posix()
         for path in root.rglob("*.png") if path.is_file()
     ))
     if not figures:
@@ -275,7 +275,7 @@ def collect_restore_result(
             "figures: не найдено ни одного диагностического графика"
         )
     artifacts = tuple(sorted(
-        str(path.relative_to(root))
+        path.relative_to(root).as_posix()
         for path in root.rglob("*")
         if path.is_file() and path.name != "result.yaml"
     ))

@@ -12,6 +12,8 @@ class LegacyRestoreBaselineTests(unittest.TestCase):
     def test_numerical_functions_still_match_reference_ast(self) -> None:
         reference = PROJECT_DIR / "ref/restore.py"
         copied = PROJECT_DIR / "src/restoration/legacy/restore.py"
+        if not reference.is_file():
+            self.skipTest("local reference data are not available")
         reference_tree = ast.parse(reference.read_text(encoding="utf-8"))
         adapted_tree = ast.parse(copied.read_text(encoding="utf-8"))
 

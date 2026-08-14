@@ -176,12 +176,12 @@ def collect_darl_result(
                 f"Не найден смоделированный сигнал распределения {name!r}: {modeled}"
             )
         artifacts = tuple(sorted(
-            str(path.relative_to(root))
+            path.relative_to(root).as_posix()
             for path in distribution_dir.rglob("*") if path.is_file()
         ))
         distributions.append(DarlDistributionResult(
             name=name,
-            modeled_signal=str(modeled.relative_to(root)),
+            modeled_signal=modeled.relative_to(root).as_posix(),
             artifacts=artifacts,
         ))
     return DarlResult(

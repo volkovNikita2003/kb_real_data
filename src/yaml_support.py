@@ -91,7 +91,7 @@ def to_plain_data(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [to_plain_data(item) for item in value]
     if isinstance(value, Path):
-        return str(value)
+        return value.as_posix()
     return value
 
 

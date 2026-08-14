@@ -42,13 +42,17 @@ class LegacyDarlAdapterTests(unittest.TestCase):
             sigma_nm=2.0, particle_count=3.0,
         )
         parameters = Mock(distributions=(distribution,))
+        code_git_dir = Path("code_git")
+        result_dir = Path("result")
         with patch.dict(calc_darl.os.environ, {"PYTHONPATH": "existing"}, clear=True):
             environment = calc_darl._legacy_environment(
-                code_git_dir=Path("/code_git"), config_name="auto_test",
-                result_dir=Path("/result"), parameters=parameters,
+                code_git_dir=code_git_dir, config_name="auto_test",
+                result_dir=result_dir, parameters=parameters,
             )
         self.assertEqual(environment["REAL_DATA_AUTO_DARL_CONFIG_NAME"], "auto_test")
-        self.assertEqual(environment["REAL_DATA_AUTO_DARL_RESULT_DIR"], "/result")
+        self.assertEqual(
+            environment["REAL_DATA_AUTO_DARL_RESULT_DIR"], str(result_dir)
+        )
         self.assertEqual(
             environment["PYTHONPATH"].split(calc_darl.os.pathsep),
             [str(SRC_DIR), "existing"],
@@ -62,7 +66,7 @@ class LegacyDarlAdapterTests(unittest.TestCase):
 class DarlCliTests(unittest.TestCase):
     def setUp(self) -> None:
         experiment = Mock()
-        experiment.darl_output_dir = Path("/tmp/darl")
+        experiment.darl_output_dir = Path("tmp") / "darl"
         self.experiment = experiment
         self.parameters = Mock()
         self.report = ValidationReport(())
@@ -72,7 +76,7 @@ class DarlCliTests(unittest.TestCase):
             kwargs["report_callback"]("darl", self.report)
             if kwargs["warnings_as_errors"] and self.report.warnings:
                 raise PipelineError("warnings")
-            return StageResult("darl", (Path("/tmp/darl"),), self.report)
+            return StageResult("darl", (self.experiment.darl_output_dir,), self.report)
         with (
             patch.object(calc_darl.Experiment, "open", return_value=self.experiment),
             patch.object(pipeline, "run_darl_stage", side_effect=stage) as run_mock,
@@ -86,7 +90,7 @@ class DarlCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(run_mock.call_args.kwargs["force"])
         self.assertIn("ошибок — 0", output)
-        self.assertIn("/tmp/darl", output)
+        self.assertIn(str(self.experiment.darl_output_dir), output)
 
     def test_warning_flags_match_other_stage_commands(self) -> None:
         self.report = ValidationReport((
