@@ -41,6 +41,7 @@ ref/test_17_07_26_kmk_15/kmk_15/сигнал/
 ref/test_17_07_26_kmk_15/kmk_15/фон/
 ref/test_17_07_26_kmk_15/kmk_15/юстировка/
 ref/test_17_07_26_kmk_15/**/*.png
+ref
 
 # Temporary files and logs
 *.log
