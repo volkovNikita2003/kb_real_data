@@ -35,9 +35,9 @@ def jinc(x):
 @dataclass
 class ExperimentConfig:
     # основные параметры
-    dir_case: Path = Path("case_dir/")
-    dir_save_rel: Path = Path("save_dir/")
-    dir_save_preprocessing_rel: Path = Path("save_dir/preprocessing/")
+    dir_case: Path = Path("case_dir")
+    dir_save_rel: Path = Path("save_dir")
+    dir_save_preprocessing_rel: Path = Path("save_dir") / "preprocessing"
 
     # установка и эксперимент
     labm_um: float = 0.633

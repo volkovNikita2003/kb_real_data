@@ -47,13 +47,11 @@ from logic.state import STATE
 
 
 CONFIG_NAME = os.environ.get(
-    "REAL_DATA_AUTO_DARL_CONFIG_NAME",
-    "conf_real_data_test_17_07_26-kmk-15-cam-lin-signal",
+    "REAL_DATA_AUTO_DARL_CONFIG_NAME"
 )
 RESULT_DIR = Path(
     os.environ.get(
-        "REAL_DATA_AUTO_DARL_RESULT_DIR",
-        SCRIPT_DIR / "test_17_07_26_kmk_15/kmk_15/darl-kmk-15-signal",
+        "REAL_DATA_AUTO_DARL_RESULT_DIR"
     )
 ).resolve()
 FIGSIZE_DETECTORS = (10, 4)

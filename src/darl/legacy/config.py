@@ -187,7 +187,7 @@ def write_legacy_config(
     root = Path(code_git_dir).expanduser().resolve()
     if not root.is_dir():
         raise LegacyDarlConfigError(f"Директория code_git не найдена: {root}")
-    configs = root / "data/configs"
+    configs = root / "data" / "configs"
     if not configs.is_dir():
         raise LegacyDarlConfigError(
             f"Директория конфигураций code_git не найдена: {configs}"

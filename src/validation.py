@@ -662,12 +662,12 @@ def validate_darl_inputs(
             "Не найдена директория вычислительного проекта code_git",
             path=code_git,
         )
-    elif not (code_git / "data/configs").is_dir():
+    elif not (code_git / "data" / "configs").is_dir():
         report.add(
             "error",
             "missing_code_git_configs_directory",
             "Не найдена директория legacy-конфигураций code_git/data/configs",
-            path=code_git / "data/configs",
+            path=code_git / "data" / "configs",
         )
     return report.build()
 
