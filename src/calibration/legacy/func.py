@@ -1666,7 +1666,7 @@ def inverse_solver(A, b):
 
     elif isinstance(REGULARIZATION_ALPHA, (int, float)):
         best_alpha = float(REGULARIZATION_ALPHA)
-        gcv_curve = None
+        gcv_curve = np.array([[best_alpha, 1.0]])
 
         if best_alpha < 0:
             raise ValueError(
