@@ -231,6 +231,7 @@ def build_legacy_restore_config(
         cam_hdr_filtered=camera_restore.hdr.filtered,
         cam_hdr_gauss_sigma=camera_restore.hdr.gaussian_sigma,
         cam_hdr_exposure_coefs=None,
+        darl_config_name=darl.legacy_config_name,
         path_signal_darl_rel=expected_signal,
         matrix_name=matrix_name,
         bins_name=bins_name,

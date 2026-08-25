@@ -1,34 +1,102 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
 import pandas as pd
+import multiprocessing as mp
 from pathlib import Path
-from PIL import Image
-from scipy.interpolate import interp1d
-from scipy.optimize import nnls
 from scipy.ndimage import gaussian_filter
 
 from calibration.legacy import func as legacy_func
 from calibration.legacy.func import (
     ExperimentConfig,
-    # get_signal_cam_good_pix,
     get_signal_cam_hdr,
-    read_coefficients,
     read_classes,
     inverse_solver_type_1,
     get_signal_cam,
     get_signal_lin,
     plot_gcv_curve,
-    plot_cam_signal,
     plot_cam_signal_valid,
-    plot_b_signal,
-    get_avg_img,
-    get_bmp_numeric_names,
 )
 from restoration.legacy.config import (
     LegacyRestoreConfigArtifact,
     LegacyRestoreConfigError,
 )
+from restoration.legacy.darl_restore_worker import (
+    run_darl_restore_worker,
+)
+
+
+def get_signal_from_restore_subprocess(
+    classes,
+    restored_distr,
+    config_name,
+    dir_save,
+    prefix,
+):
+    context = mp.get_context("spawn")
+    receive_connection, send_connection = context.Pipe(
+        duplex=False,
+    )
+
+    process = context.Process(
+        target=run_darl_restore_worker,
+        args=(
+            send_connection,
+            np.asarray(classes),
+            np.asarray(restored_distr),
+            config_name,
+            str(Path(dir_save).resolve()),
+            prefix,
+        ),
+        name="darl-restore",
+    )
+    process.start()
+    send_connection.close()
+
+    try:
+        status, payload = receive_connection.recv()
+    except EOFError as error:
+        process.join()
+        raise RuntimeError(
+            "DARL-процесс завершился, не передав сигнал"
+        ) from error
+    finally:
+        receive_connection.close()
+
+    process.join()
+    if process.exitcode != 0:
+        raise RuntimeError(
+            f"DARL-процесс завершился с кодом {process.exitcode}"
+        )
+    if status == "error":
+        raise RuntimeError(f"Ошибка в DARL-процессе:\n{payload}")
+
+    return np.asarray(payload)
+
+
+def plot_signal(data, dir_save, filename_save):
+    plt.figure(figsize=(10, 5))
+    b_save = []
+    header = ""
+    for b, label in data:
+        plt.plot(b, marker="o", markersize=3, label=label)
+        b_save.append(b)
+        header += f"{label}\t"
+    b_save = np.array(b_save)
+    plt.xlabel("№ бинa")
+    plt.ylabel("Нормированный сигнал")
+    plt.grid()
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(dir_save/f"{filename_save}.png")
+    plt.close()
+    np.savetxt(
+        dir_save/f"{filename_save}.txt",
+        b_save,
+        delimiter="\t",
+        header=header,
+        comments="",
+        fmt="%g"
+    )
 
 
 def save_reference_restoration(
@@ -182,6 +250,11 @@ def run_cfg(cfg:ExperimentConfig):
 
         b_lin_norm = b_lin/(exposure_time_us_lin+cfg.lin_time_add)*cfg.coef_lin_to_cam
         b = np.hstack((b_cam_norm, b_lin_norm))
+        b_real_norm = b / np.max(b)
+
+        data_signal = [(b_real_norm, "real_norm")]
+        if cfg.path_signal_darl_rel is not None:
+            data_signal.append((darl_signal_b_norm, "darl_norm"))
 
         np.savetxt(
             cfg.dir_save / "reference_camera_signal.txt",
@@ -265,6 +338,33 @@ def run_cfg(cfg:ExperimentConfig):
             alpha_reg,
         )
         plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
+
+        b_restored_distr_reg = get_signal_from_restore_subprocess(
+            classes,
+            restored_distr_reg,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            "",
+        )
+        b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
+            cfg.dir_save,
+            f"restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+        )
+        b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
+            classes,
+            restored_distr_reg_iter,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            "",
+        )
+        b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
+            cfg.dir_save,
+            f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+        )
 
         plt.figure(figsize=(10, 5))
         plt.plot(sizes, restored_distr_reg, label="reg")
@@ -364,6 +464,34 @@ def run_cfg(cfg:ExperimentConfig):
             )
             plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
 
+            b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
+                classes_cutted,
+                restored_distr_reg_cutted,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                f"cutted_{cut_classes}_",
+            )
+            b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
+                cfg.dir_save,
+                f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+            )
+            
+            b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
+                classes_cutted,
+                restored_distr_reg_iter_cutted,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                f"cutted_{cut_classes}_",
+            )
+            b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")], 
+                cfg.dir_save, 
+                f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+            )
+
             plt.figure(figsize=(10, 5))
             plt.plot(sizes_cutted, restored_distr_reg_cutted, label="reg")
             plt.plot(sizes_cutted, restored_distr_reg_iter_cutted, label="reg+iter")
@@ -430,41 +558,15 @@ def run_cfg(cfg:ExperimentConfig):
 
 
         if cfg.path_signal_darl_rel is not None:
-            b_real_norm = b / np.max(b)
-            plt.figure(figsize=(10, 5))
-            plt.plot(b_real_norm, marker="o", markersize=3, label="real norm")
-            plt.plot(darl_signal_b_norm, marker="o", markersize=3, label="darl norm")
-            plt.xlabel("№ бинa")
-            plt.ylabel("Нормированный сигнал")
-            plt.grid()
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(cfg.dir_save/f"compare-real-darl-signals-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
-            plt.close()
-            np.savetxt(
-                cfg.dir_save/f"compare-real-darl-signals-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.txt",
-                np.column_stack((b_real_norm, darl_signal_b_norm)),
-                delimiter="\t",
-                header="b_real_norm\tdarl_signal_b_norm",
-                comments="",
-                fmt="%g"
+            plot_signal(
+                [
+                    (b_real_norm, "real_norm"),
+                    (darl_signal_b_norm, "darl_norm"),
+                ],
+                cfg.dir_save,
+                f"compare-real-darl-signals-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}",
             )
 
-        # plt.figure(figsize=(10, 5))
-        # plt.plot(b_real_norm, marker="o", markersize=3, label="real norm")
-        # plt.plot(darl_signal_b_norm, marker="o", markersize=3, label="darl norm")
-        # x_lin_start = b_cam.shape[0]
-        # x_lin_stop = len(b_real_norm)
-        # plt.xlim(x_lin_start-0.5, x_lin_stop)
-        # # plt.ylim(0.0, np.max([b_real_norm[x_lin_start:x_lin_stop], darl_signal_b_norm[x_lin_start:x_lin_stop]]))
-        # plt.ylim(0.0, np.max([b_real_norm[x_lin_start:x_lin_stop], darl_signal_b_norm[x_lin_start:x_lin_stop]]))
-        # plt.xlabel("№ бинa")
-        # plt.ylabel("Нормированный сигнал")
-        # plt.grid()
-        # plt.legend()
-        # plt.tight_layout()
-        # plt.savefig(cfg.dir_save/f"compare-real-darl-signals-lin-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
-        # plt.close()
     print("Готово")
 
 

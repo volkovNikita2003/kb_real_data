@@ -56,9 +56,9 @@ RESULT_DIR = Path(
 ).resolve()
 FIGSIZE_DETECTORS = (10, 4)
 DISTRIBUTIONS = [
-    ("gauss", {"active": 0, "mean": 200000.0, "sigma": 500.0, "count": 2e4, "comment": "pinhole_200"}, None),
+    # ("gauss", {"active": 0, "mean": 200000.0, "sigma": 500.0, "count": 2e4, "comment": "pinhole_200"}, None),
 
-    ("gauss", {"active": 0, "mean": 15000.0, "sigma": 3000.0, "count": 1e6, "comment": "kmk_15"}, None),
+    # ("gauss", {"active": 0, "mean": 15000.0, "sigma": 3000.0, "count": 1e6, "comment": "kmk_15"}, None),
     # ("gauss", {"active": 0, "mean": 25000.0, "sigma": 3000.0, "count": 1e6, "comment": "kmk_25"}, None),
     # ("gauss", {"active": 0, "mean": 100000.0, "sigma": 10000.0, "count": 2e4, "comment": "kmk_100"}, None),
     # ("gauss", {"active": 0, "mean": 160000.0, "sigma": 10000.0, "count": 2e4, "comment": "kmk_160"}, None),

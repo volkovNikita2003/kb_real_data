@@ -101,6 +101,7 @@ class ExperimentConfig:
 
 
     # darl
+    darl_config_name: str = None
     path_signal_darl_rel: str = None
 
     matrix_name: str = "matrix.npz"
