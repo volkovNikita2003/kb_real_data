@@ -559,10 +559,7 @@ def run_cfg(cfg:ExperimentConfig):
 
         if cfg.path_signal_darl_rel is not None:
             plot_signal(
-                [
-                    (b_real_norm, "real_norm"),
-                    (darl_signal_b_norm, "darl_norm"),
-                ],
+                data_signal,
                 cfg.dir_save,
                 f"compare-real-darl-signals-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}",
             )
@@ -570,7 +567,7 @@ def run_cfg(cfg:ExperimentConfig):
     print("Готово")
 
 
-def run_cfg_lin_cut(cfg):
+def run_cfg_lin_cut(cfg:ExperimentConfig):
     exposure_time = np.max(cfg.exposure_time_arr)
     cfg.dir_save.mkdir(exist_ok=True, parents=True)
     cfg.save_params()
@@ -648,6 +645,11 @@ def run_cfg_lin_cut(cfg):
     plt.close()
 
     b = b_cam_norm
+    b_real_norm = b / np.max(b)
+
+    data_signal = [(b_real_norm, "real_norm")]
+    if cfg.path_signal_darl_rel is not None:
+        data_signal.append((darl_signal_b_norm, "darl_norm"))
 
     np.savetxt(
         cfg.dir_save / "reference_camera_signal.txt",
@@ -692,6 +694,34 @@ def run_cfg_lin_cut(cfg):
         alpha_reg,
     )
     plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}.png")
+
+    b_restored_distr_reg = get_signal_from_restore_subprocess(
+        classes,
+        restored_distr_reg,
+        cfg.darl_config_name,
+        cfg.dir_save,
+        "",
+    )
+    b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
+    plot_signal(
+        data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
+        cfg.dir_save,
+        f"restored_distr_reg-signal-all-ex_time_{exposure_time}",
+    )
+
+    b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
+        classes,
+        restored_distr_reg_iter,
+        cfg.darl_config_name,
+        cfg.dir_save,
+        "",
+    )
+    b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
+    plot_signal(
+        data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
+        cfg.dir_save,
+        f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
+    )
 
     plt.figure(figsize=(10, 5))
     plt.plot(sizes, restored_distr_reg, label="reg")
@@ -795,6 +825,34 @@ def run_cfg_lin_cut(cfg):
         )
         plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}.png")
 
+        b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
+            classes_cutted,
+            restored_distr_reg_cutted,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            f"cutted_{cut_classes}_",
+        )
+        b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
+            cfg.dir_save,
+            f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}",
+        )
+
+        b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
+            classes_cutted,
+            restored_distr_reg_iter_cutted,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            f"cutted_{cut_classes}_",
+        )
+        b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")],
+            cfg.dir_save,
+            f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
+        )
+
         plt.figure(figsize=(10, 5))
         plt.plot(sizes_cutted, restored_distr_reg_cutted, label="reg")
         plt.plot(sizes_cutted, restored_distr_reg_iter_cutted, label="reg+iter")
@@ -866,24 +924,10 @@ def run_cfg_lin_cut(cfg):
 
 
     if cfg.path_signal_darl_rel is not None:
-        b_real_norm = b / np.max(b)
-        plt.figure(figsize=(10, 5))
-        plt.plot(b_real_norm, marker="o", markersize=3, label="real norm")
-        plt.plot(darl_signal_b_norm, marker="o", markersize=3, label="darl norm")
-        plt.xlabel("№ бинa")
-        plt.ylabel("Нормированный сигнал")
-        plt.grid()
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(cfg.dir_save/f"compare-real-darl-signals-all-ex_time_{exposure_time}.png")
-        plt.close()
-        np.savetxt(
-            cfg.dir_save/f"compare-real-darl-signals-all-ex_time_{exposure_time}.txt",
-            np.column_stack((b_real_norm, darl_signal_b_norm)),
-            delimiter="\t",
-            header="b_real_norm\tdarl_signal_b_norm",
-            comments="",
-            fmt="%g"
+        plot_signal(
+            data_signal,
+            cfg.dir_save,
+            f"compare-real-darl-signals-all-ex_time_{exposure_time}",
         )
 
     print("Готово")
