@@ -1295,6 +1295,28 @@ def get_signal_lin(
     bin_centers = np.array(bin_centers)
     return bin_sums, bin_centers
 
+
+def get_laser_center_pos_pix(
+    detector_configuration_type,
+    signal_shape,
+    x_shift_pix,
+    y_shift_pix,
+):
+    if detector_configuration_type == 0:
+        center_laser_pix = (
+            signal_shape[1] + x_shift_pix,
+            signal_shape[0] // 2 + y_shift_pix
+        )
+    elif detector_configuration_type == 1:
+        center_laser_pix = (
+            -x_shift_pix,
+            signal_shape[0] // 2 - y_shift_pix
+        )
+    else:
+        raise ValueError(f"Wrong value {detector_configuration_type=}")
+    return center_laser_pix
+
+
 def get_signal_cam(bins_cam, filename_cam, filename_cam_dark,
     cam_pixel_width_m = None,
     x_shift_pix = None,
@@ -1383,19 +1405,12 @@ def get_signal_cam(bins_cam, filename_cam, filename_cam_dark,
         plt.close()
 
 
-    center_laser_pix = (None, None)
-    if detector_configuration_type == 0:
-        center_laser_pix = (
-            data.shape[1] + x_shift_pix,
-            data.shape[0] // 2 + y_shift_pix
-        )
-    elif detector_configuration_type == 1:
-        center_laser_pix = (
-            -x_shift_pix,
-            data.shape[0] // 2 - y_shift_pix
-        )
-    else:
-        raise ValueError(f"Wrong value {detector_configuration_type=}")
+    center_laser_pix = get_laser_center_pos_pix(
+        detector_configuration_type,
+        data.shape,
+        x_shift_pix,
+        y_shift_pix,
+    )
     print(f"matrix shift_x: {x_shift_pix*cam_pixel_width_m*1e6:.3f} um")
     print(f"matrix shift_y: {y_shift_pix*cam_pixel_width_m*1e6:.3f} um")
     print(f"center_laser_pix: {center_laser_pix}")
@@ -1922,3 +1937,72 @@ def plot_b_signal(b, save_path):
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close()
+
+
+def print_cam_pix_valid_per_bin(
+    signal_mask,
+    bins,
+    cam_pixel_width_m,
+    center_laser_pix,
+    dir_save,
+):
+    print("\nВалидные пиксели в бинах камеры")
+    dir_save = Path(dir_save)
+    dir_save.mkdir(parents=True, exist_ok=True)
+    path_save = dir_save / "cam_pix_valid_per_bin.txt"
+
+    x_center, y_center = center_laser_pix
+    height, width = signal_mask.shape
+    y, x = np.indices((height, width))
+    r2 = (x - x_center) ** 2 + (y - y_center) ** 2
+
+    with open(path_save, "w", encoding="utf-8") as f:
+        f.write(
+            "bin\t"
+            "r_in_um\t"
+            "r_out_um\t"
+            "valid_pixels\t"
+            "total_pixels\t"
+            "valid_percent\n"
+        )
+
+        for i, row in bins.iterrows():
+            r_in_m = row["r_in_m"]
+            r_out_m = row["r_out_m"]
+
+            r_in_pix = r_in_m / cam_pixel_width_m
+            r_out_pix = r_out_m / cam_pixel_width_m
+
+            bin_mask = (
+                (r2 >= r_in_pix ** 2)
+                & (r2 < r_out_pix ** 2)
+            )
+
+            total_count = np.count_nonzero(bin_mask)
+            valid_count = np.count_nonzero(
+                bin_mask & signal_mask
+            )
+
+            valid_percent = (
+                100 * valid_count / total_count
+                if total_count > 0 else 0
+            )
+
+            print(
+                f"bin {i}: "
+                f"valid={valid_count}/{total_count}, "
+                f"({valid_percent:.2f}%)"
+            )
+
+            r_in_um = r_in_m * 1e6
+            r_out_um = r_out_m * 1e6
+            f.write(
+                f"{i}\t"
+                f"{r_in_um:.2f}\t"
+                f"{r_out_um:.2f}\t"
+                f"{valid_count}\t"
+                f"{total_count}\t"
+                f"{valid_percent:.2f}\n"
+            )
+
+    print(f"Saved to: {path_save}\n")

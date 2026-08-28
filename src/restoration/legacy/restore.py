@@ -15,6 +15,8 @@ from calibration.legacy.func import (
     get_signal_lin,
     plot_gcv_curve,
     plot_cam_signal_valid,
+    print_cam_pix_valid_per_bin,
+    get_laser_center_pos_pix,
 )
 from restoration.legacy.config import (
     LegacyRestoreConfigArtifact,
@@ -182,6 +184,18 @@ def run_cfg(cfg:ExperimentConfig):
 
 
     signal_cam, cam_mask_valid = get_signal_cam_hdr(cfg)
+    print_cam_pix_valid_per_bin(
+        cam_mask_valid,
+        bins_cam,
+        cfg.cam_pixel_width_m,
+        get_laser_center_pos_pix(
+            cfg.detector_configuration_type,
+            signal_cam.shape,
+            cfg.x_shift_pix,
+            cfg.y_shift_pix,
+        ),
+        cfg.dir_save,
+    )
 
     if cfg.cam_hdr_filtered:
         signal_cam = gaussian_filter(signal_cam, sigma=(cfg.cam_hdr_gauss_sigma, cfg.cam_hdr_gauss_sigma))
