@@ -358,7 +358,7 @@ def run_cfg(cfg:ExperimentConfig):
             restored_distr_reg,
             cfg.darl_config_name,
             cfg.dir_save,
-            "",
+            "reg_",
         )
         b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
         plot_signal(
@@ -371,7 +371,7 @@ def run_cfg(cfg:ExperimentConfig):
             restored_distr_reg_iter,
             cfg.darl_config_name,
             cfg.dir_save,
-            "",
+            "reg_iter_",
         )
         b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
         plot_signal(
@@ -483,7 +483,7 @@ def run_cfg(cfg:ExperimentConfig):
                 restored_distr_reg_cutted,
                 cfg.darl_config_name,
                 cfg.dir_save,
-                f"cutted_{cut_classes}_",
+                f"cutted_{cut_classes}_reg_",
             )
             b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
             plot_signal(
@@ -497,7 +497,7 @@ def run_cfg(cfg:ExperimentConfig):
                 restored_distr_reg_iter_cutted,
                 cfg.darl_config_name,
                 cfg.dir_save,
-                f"cutted_{cut_classes}_",
+                f"cutted_{cut_classes}_reg_iter_",
             )
             b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
             plot_signal(
@@ -714,7 +714,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
         restored_distr_reg,
         cfg.darl_config_name,
         cfg.dir_save,
-        "",
+        "reg_",
     )
     b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
     plot_signal(
@@ -728,7 +728,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
         restored_distr_reg_iter,
         cfg.darl_config_name,
         cfg.dir_save,
-        "",
+        "reg_iter_",
     )
     b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
     plot_signal(
@@ -844,7 +844,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
             restored_distr_reg_cutted,
             cfg.darl_config_name,
             cfg.dir_save,
-            f"cutted_{cut_classes}_",
+            f"cutted_{cut_classes}_reg_",
         )
         b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
         plot_signal(
@@ -858,7 +858,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
             restored_distr_reg_iter_cutted,
             cfg.darl_config_name,
             cfg.dir_save,
-            f"cutted_{cut_classes}_",
+            f"cutted_{cut_classes}_reg_iter_",
         )
         b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
         plot_signal(
