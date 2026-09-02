@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 
+import yaml
+
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SRC_DIR))
@@ -23,6 +25,43 @@ EMPTY_REPORT = ValidationReport(())
 
 
 class StageOrchestrationTests(unittest.TestCase):
+    def test_external_operator_context_does_not_load_darl_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = create_experiment(Path(directory))
+            bundle = path / "input_artifacts/operators/imported"
+            bundle.mkdir(parents=True)
+            for name in ("matrix.npz", "classes.txt", "bins.txt"):
+                (bundle / name).write_bytes(b"test")
+            (bundle / "manifest.yaml").write_text(yaml.safe_dump({
+                "schema_version": 1,
+                "detectors": ["camera"],
+                "signal": {"value_type": "signal"},
+                "files": {
+                    "matrix": "matrix.npz",
+                    "particle_classes": "classes.txt",
+                    "detector_bins": {"camera": "bins.txt"},
+                },
+            }, sort_keys=False), encoding="utf-8")
+            profile = path / "input_parameters/restore_profiles/default.yaml"
+            value = yaml.safe_load(profile.read_text(encoding="utf-8"))
+            value["operator"] = {
+                "source": "file",
+                "manifest": "input_artifacts/operators/imported/manifest.yaml",
+            }
+            profile.write_text(
+                yaml.safe_dump(value, sort_keys=False), encoding="utf-8"
+            )
+            experiment = Experiment.open(path)
+            with (
+                patch.object(pipeline, "load_calibration_result", return_value=Mock()),
+                patch.object(pipeline, "load_darl_result") as load_darl,
+            ):
+                context = pipeline._restore_context(
+                    experiment, measurement_names=None, profile_names=None
+                )
+            load_darl.assert_not_called()
+            self.assertEqual(context[-1]["default"].source, "file")
+
     def test_calibration_loads_validates_and_runs(self) -> None:
         experiment = Mock()
         experiment.calibration_output_dir = Path("/output/calibration")
@@ -133,8 +172,8 @@ class StageOrchestrationTests(unittest.TestCase):
             patch.object(
                 pipeline, "_restore_context",
                 return_value=(
-                    Mock(), Mock(), Mock(), measurements, profiles,
-                    restore_parameters,
+                    Mock(), Mock(), measurements, profiles,
+                    restore_parameters, {"p1": Mock()},
                 ),
             ),
             patch.object(

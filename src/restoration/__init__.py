@@ -9,6 +9,11 @@ from restoration.result import (
     load_restore_result,
     save_restore_result,
 )
+from restoration.operator import (
+    ForwardOperator,
+    ForwardOperatorError,
+    resolve_operator,
+)
 
 __all__ = [
     "RestoreResult",
@@ -18,4 +23,7 @@ __all__ = [
     "collect_restore_result",
     "load_restore_result",
     "save_restore_result",
+    "ForwardOperator",
+    "ForwardOperatorError",
+    "resolve_operator",
 ]

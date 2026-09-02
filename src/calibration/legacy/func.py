@@ -119,6 +119,7 @@ class ExperimentConfig:
     use_w_critical: bool = False
     use_chahine: bool = True
     use_conc_corr: bool = True
+    forward_modeling_enabled: bool = False
 
     cut_classes: int = None
     cut_classes_top: int = None

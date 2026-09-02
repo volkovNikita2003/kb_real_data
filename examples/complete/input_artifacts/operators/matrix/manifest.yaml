@@ -1,0 +1,20 @@
+schema_version: 1
+# список используемых детекторов в файлах
+detectors:
+  - camera
+  - line_sensor
+# тип сигнала signal/intensity в матрице. То же самое, что в darl.yaml
+signal:
+  value_type: signal
+# передаваемые файлы, хранятся в той же директории, что и текущий файл
+files:
+  matrix: matrix.npz
+  particle_classes: particle_classes.txt
+  detector_bins:
+    camera: bins_camera.txt
+    line_sensor: bins_line_sensor.txt
+  # сигналы шума в детекторах.
+  # опциональный файл, в вычислениях не используется, 
+  # добавлена возможность передачи для соответствия результату darl 
+  background_signals:
+    - background_signal.txt

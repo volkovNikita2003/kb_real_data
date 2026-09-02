@@ -8,7 +8,7 @@ from typing import Callable, Iterable, Sequence
 
 from calibration import CalibrationResult, load_calibration_result
 import calc_darl
-from darl import DarlResult, load_darl_result
+from darl import load_darl_result
 from errors import ExperimentStructureError, OutputError, PipelineError
 from experiment import Experiment, Measurement, RestoreProfile
 from parameters import (
@@ -22,6 +22,10 @@ from parameters import (
 )
 import preprocessing
 import restore as restore_command
+from restoration.operator import (
+    ForwardOperator,
+    resolve_operator,
+)
 from validation import (
     ValidationReport,
     validate_calibration_inputs,
@@ -163,10 +167,10 @@ def _restore_context(
 ) -> tuple[
     GeneralParameters,
     CalibrationResult,
-    DarlResult,
     tuple[Measurement, ...],
     tuple[RestoreProfile, ...],
     dict[str, RestoreParameters],
+    dict[str, ForwardOperator],
 ]:
     measurements, profiles = selected_restore_inputs(
         experiment,
@@ -175,14 +179,26 @@ def _restore_context(
     )
     general = load_general_parameters(experiment.general_parameters_file)
     calibration = load_calibration_result(experiment.calibration_result_file)
-    darl = load_darl_result(experiment.darl_result_file)
     restore_by_profile = {
         profile.name: load_restore_parameters(profile.path)
         for profile in profiles
     }
+    needs_darl = any(
+        restore.operator.source == "darl"
+        for restore in restore_by_profile.values()
+    )
+    darl = (
+        load_darl_result(experiment.darl_result_file) if needs_darl else None
+    )
+    operators_by_profile = {
+        profile.name: resolve_operator(
+            experiment, restore_by_profile[profile.name].operator, darl=darl
+        )
+        for profile in profiles
+    }
     return (
-        general, calibration, darl, measurements, profiles,
-        restore_by_profile,
+        general, calibration, measurements, profiles,
+        restore_by_profile, operators_by_profile,
     )
 
 
@@ -196,8 +212,8 @@ def run_restore_stage(
     report_callback: ReportCallback | None = None,
 ) -> StageResult:
     (
-        general, calibration, darl, measurements, profiles,
-        restore_by_profile,
+        general, calibration, measurements, profiles,
+        restore_by_profile, operators_by_profile,
     ) = _restore_context(
         experiment,
         measurement_names=measurement_names,
@@ -211,7 +227,7 @@ def run_restore_stage(
             general=general,
             restore=restore_by_profile[profile.name],
             calibration=calibration,
-            darl=darl,
+            operator=operators_by_profile[profile.name],
         )
         for profile in profiles
         for measurement in measurements
@@ -233,7 +249,7 @@ def run_restore_stage(
             general=general,
             restore=restore_by_profile[profile.name],
             calibration=calibration,
-            darl=darl,
+            operator=operators_by_profile[profile.name],
             force=force,
         )
         for profile in profiles

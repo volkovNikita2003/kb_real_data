@@ -13,6 +13,11 @@ from errors import RestorationError
 from experiment import Experiment, Measurement
 from parameters import GeneralParameters, RestoreParameters
 
+from restoration.operator import (
+    ForwardOperator,
+    ForwardOperatorError,
+    from_darl
+)
 
 class LegacyRestoreConfigError(RestorationError):
     """The selected inputs cannot be represented by the legacy algorithm."""
@@ -67,42 +72,6 @@ def _relative_to_experiment(
         ) from error
 
 
-def _darl_artifact(
-    experiment: Experiment,
-    relative_path: str,
-    *,
-    location: str,
-) -> Path:
-    if not isinstance(relative_path, str) or not relative_path:
-        raise LegacyRestoreConfigError(
-            f"{location}: ожидался непустой относительный путь"
-        )
-    root = experiment.darl_output_dir.resolve()
-    resolved = (root / relative_path).resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as error:
-        raise LegacyRestoreConfigError(
-            f"{location}: путь выходит за пределы output/darl: {relative_path}"
-        ) from error
-    return _relative_to_experiment(
-        experiment, resolved, location=location
-    )
-
-
-def _detector_bin_file(darl: DarlResult, detector: str) -> str:
-    expected = {
-        "camera": "bins_front_detector.txt",
-        "line_sensor": "FrontDetectorLogLine_detector.txt",
-    }[detector]
-    if expected not in darl.detector_bin_files:
-        raise LegacyRestoreConfigError(
-            f"darl.result.detector_bin_files: для {detector!r} "
-            f"не найден {expected}"
-        )
-    return expected
-
-
 def build_legacy_restore_config(
     *,
     experiment: Experiment,
@@ -110,12 +79,23 @@ def build_legacy_restore_config(
     general: GeneralParameters,
     restore: RestoreParameters,
     calibration: CalibrationResult,
-    darl: DarlResult,
+    operator: ForwardOperator | None = None,
+    darl: DarlResult | None = None,
     output_dir: str | Path,
     camera_exposures_us: tuple[int, ...],
     line_exposure_us: int | None,
 ) -> LegacyRestoreConfigArtifact:
     """Build the exact legacy configuration for one restoration run."""
+    if operator is None:
+        if darl is None:
+            raise LegacyRestoreConfigError("Не задан аппаратный оператор")
+        try:
+            operator = from_darl(experiment, darl)
+        except ForwardOperatorError as error:
+            message = str(error).replace(
+                "разрешённого каталога", "output/darl"
+            )
+            raise LegacyRestoreConfigError(message) from error
     if measurement.path.resolve() != (experiment.data_dir / measurement.name).resolve():
         raise LegacyRestoreConfigError(
             "measurement: измерение не принадлежит переданному эксперименту"
@@ -133,11 +113,11 @@ def build_legacy_restore_config(
             "Профиль использует отсутствующие детекторы general.yaml: "
             + ", ".join(sorted(missing_general))
         )
-    missing_darl = restore_detectors - set(darl.detectors)
-    if missing_darl:
+    missing_operator = restore_detectors - set(operator.detectors)
+    if missing_operator:
         raise LegacyRestoreConfigError(
-            "Профиль использует детекторы, отсутствующие в результате DARL: "
-            + ", ".join(sorted(missing_darl))
+            "Профиль использует детекторы, отсутствующие в операторе: "
+            + ", ".join(sorted(missing_operator))
         )
 
     camera_geometry = general.detectors.camera
@@ -160,36 +140,25 @@ def build_legacy_restore_config(
         experiment, output, location="output_dir"
     )
 
-    matrix_name = _darl_artifact(
-        experiment, darl.matrix_file, location="darl.result.matrix_file"
+    matrix_name = _relative_to_experiment(
+        experiment, operator.matrix_file, location="operator.matrix_file"
     )
-    classes_name = _darl_artifact(
-        experiment,
-        darl.particle_classes_file,
-        location="darl.result.particle_classes_file",
+    classes_name = _relative_to_experiment(
+        experiment, operator.particle_classes_file,
+        location="operator.particle_classes_file",
     )
-    bins_name = _darl_artifact(
-        experiment,
-        _detector_bin_file(darl, "camera"),
-        location="darl.result.detector_bin_files.camera",
+    bins_name = _relative_to_experiment(
+        experiment, operator.detector_bin_files["camera"],
+        location="operator.detector_bin_files.camera",
     )
-
-    expected = [
-        item for item in darl.distributions if item.name == measurement.name
-    ]
-    if len(expected) > 1:
-        raise LegacyRestoreConfigError(
-            f"darl.result.distributions: имя {measurement.name!r} повторяется"
+    expected_path = operator.expected_signal(measurement.name)
+    expected_signal = (
+        _relative_to_experiment(
+            experiment, expected_path,
+            location=f"operator.expected_signals.{measurement.name}",
         )
-    expected_signal = None
-    if expected:
-        expected_signal = _darl_artifact(
-            experiment,
-            expected[0].modeled_signal,
-            location=(
-                f"darl.result.distributions.{measurement.name}.modeled_signal"
-            ),
-        )
+        if expected_path is not None else None
+    )
 
     position = {"old": 0, "new": 1}.get(
         general.instrument.detector_position
@@ -231,15 +200,16 @@ def build_legacy_restore_config(
         cam_hdr_filtered=camera_restore.hdr.filtered,
         cam_hdr_gauss_sigma=camera_restore.hdr.gaussian_sigma,
         cam_hdr_exposure_coefs=None,
-        darl_config_name=darl.legacy_config_name,
+        darl_config_name=operator.name,
         path_signal_darl_rel=expected_signal,
         matrix_name=matrix_name,
         bins_name=bins_name,
         classes_name=classes_name,
-        signal_type=darl.signal.value_type,
+        signal_type=operator.signal_value_type,
         use_w_critical=restore.solver.use_w_critical,
         use_chahine=restore.solver.use_chahine,
         use_conc_corr=restore.solver.use_concentration_correction,
+        forward_modeling_enabled=restore.forward_modeling.enabled,
         cut_classes=restore.class_slice.drop_first,
         cut_classes_top=restore.class_slice.drop_last,
     )
@@ -279,10 +249,9 @@ def build_legacy_restore_config(
         cfg.width_pix_y_m = line_calibration.pixel_height_m
         cfg.lin_time_add = line_restore.time_offset_us
         cfg.lin_signal_mode = line_restore.signal_mode
-        cfg.bins_lin_name = _darl_artifact(
-            experiment,
-            _detector_bin_file(darl, "line_sensor"),
-            location="darl.result.detector_bin_files.line_sensor",
+        cfg.bins_lin_name = _relative_to_experiment(
+            experiment, operator.detector_bin_files["line_sensor"],
+            location="operator.detector_bin_files.line_sensor",
         )
         run_mode = "camera_line"
     elif line_exposure_us is not None:

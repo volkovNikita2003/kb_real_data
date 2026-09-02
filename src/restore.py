@@ -14,7 +14,7 @@ from calibration import (
     CalibrationResult,
     CalibrationResultError,
 )
-from darl import DarlResult, DarlResultError
+from darl import DarlResultError
 from errors import (
     ExperimentStructureError,
     OutputError,
@@ -32,6 +32,10 @@ from parameters import (
 )
 from restoration.legacy.config import build_legacy_restore_config
 from restoration.legacy.restore import run_legacy_restore
+from restoration.operator import (
+    ForwardOperator,
+    ForwardOperatorError,
+)
 from restoration.result import collect_restore_result, save_restore_result
 from validate import format_report
 from validation import (
@@ -120,13 +124,14 @@ def _measurement_inputs(
 
 def _effective_parameters(
     *,
+    experiment: Experiment,
     general: GeneralParameters,
     restore: RestoreParameters,
     profile: RestoreProfile,
     measurement: Measurement,
     measurement_inputs: dict[str, object],
     calibration: CalibrationResult,
-    darl: DarlResult,
+    operator: ForwardOperator,
 ) -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -138,7 +143,7 @@ def _effective_parameters(
         "restore": to_plain_data(restore),
         "measurement_inputs": to_plain_data(measurement_inputs),
         "calibration_result": calibration.to_dict(),
-        "darl_result": darl.to_dict(),
+        "forward_operator": operator.to_dict(experiment),
     }
 
 
@@ -150,7 +155,7 @@ def run_pair(
     general: GeneralParameters,
     restore: RestoreParameters,
     calibration: CalibrationResult,
-    darl: DarlResult,
+    operator: ForwardOperator,
     force: bool = False,
 ) -> Path:
     """Calculate and transactionally publish one profile/measurement pair."""
@@ -165,7 +170,7 @@ def run_pair(
             general=general,
             restore=restore,
             calibration=calibration,
-            darl=darl,
+            operator=operator,
             output_dir=directory,
             camera_exposures_us=camera_exposures,
             line_exposure_us=line_exposure,
@@ -174,13 +179,14 @@ def run_pair(
         write_used_parameters(
             directory / "used-parameters.yaml",
             _effective_parameters(
+                experiment=experiment,
                 general=general,
                 restore=restore,
                 profile=profile,
                 measurement=measurement,
                 measurement_inputs=measurement_inputs,
                 calibration=calibration,
-                darl=darl,
+                operator=operator,
             ),
         )
         class_slice_prefix = (
@@ -189,9 +195,7 @@ def run_pair(
             and restore.class_slice.drop_last is None
             else f"cutted_{restore.class_slice.drop_first}_"
         )
-        expected_signal = any(
-            item.name == measurement.name for item in darl.distributions
-        )
+        expected_signal = operator.expected_signal(measurement.name) is not None
         result = collect_restore_result(
             directory,
             restore_profile=profile.name,
@@ -227,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         ParametersError,
         CalibrationResultError,
         DarlResultError,
+        ForwardOperatorError,
         RestorationError,
         OutputError,
         OSError,

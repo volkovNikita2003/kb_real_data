@@ -192,6 +192,7 @@ class LegacyRestoreConfigTests(unittest.TestCase):
             self.assertEqual(cfg.cut_classes_top, 100)
             self.assertFalse(cfg.use_chahine)
             self.assertTrue(cfg.use_w_critical)
+            self.assertFalse(cfg.forward_modeling_enabled)
             self.assertEqual(artifact.solver.regularization_type, 2)
             self.assertEqual(artifact.solver.regularization_alpha, 0.25)
             self.assertEqual(artifact.solver.w_critical, 0.002)

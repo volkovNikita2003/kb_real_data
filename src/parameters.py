@@ -748,11 +748,28 @@ class ClassSliceParameters:
 
 
 @dataclass(frozen=True)
+class RestoreOperatorParameters:
+    source: str = "darl"
+    manifest: str | None = field(default=None, metadata={YAML_OMIT_NONE: True})
+
+
+@dataclass(frozen=True)
+class ForwardModelingParameters:
+    enabled: bool = False
+
+
+@dataclass(frozen=True)
 class RestoreParameters:
     schema_version: int
     detectors: RestoreDetectors
     solver: SolverParameters = field(default_factory=SolverParameters)
     class_slice: ClassSliceParameters = field(default_factory=ClassSliceParameters)
+    operator: RestoreOperatorParameters = field(
+        default_factory=RestoreOperatorParameters
+    )
+    forward_modeling: ForwardModelingParameters = field(
+        default_factory=ForwardModelingParameters
+    )
 
 
 def load_restore_parameters(path: str | Path) -> RestoreParameters:
@@ -761,10 +778,48 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
         _load_yaml(source),
         source.name,
         required={"schema_version", "detectors"},
-        optional={"solver", "class_slice"},
+        optional={"operator", "forward_modeling", "solver", "class_slice"},
     )
     version = _schema(root, source.name)
     prefix = source.name
+    operator_data = _fields(
+        root.get("operator", {}),
+        f"{prefix}.operator",
+        optional={"source", "manifest"},
+    )
+    operator_source = _choice(
+        operator_data.get("source", "darl"),
+        f"{prefix}.operator.source",
+        {"darl", "file"},
+    )
+    manifest = operator_data.get("manifest")
+    if operator_source == "file":
+        if manifest is None:
+            raise ParametersError(
+                f"{prefix}.operator.manifest: обязательное поле при source: file"
+            )
+        manifest = _string(manifest, f"{prefix}.operator.manifest")
+    elif manifest is not None:
+        raise ParametersError(
+            f"{prefix}.operator.manifest: поле запрещено при source: darl"
+        )
+    operator = RestoreOperatorParameters(operator_source, manifest)
+    forward_modeling_data = _fields(
+        root.get("forward_modeling", {}),
+        f"{prefix}.forward_modeling",
+        optional={"enabled"},
+    )
+    forward_modeling = ForwardModelingParameters(
+        enabled=_boolean(
+            forward_modeling_data.get("enabled", False),
+            f"{prefix}.forward_modeling.enabled",
+        )
+    )
+    if operator.source == "file" and forward_modeling.enabled:
+        raise ParametersError(
+            f"{prefix}.forward_modeling.enabled: должно быть false при "
+            "operator.source: file"
+        )
     detector_data = _fields(
         root["detectors"],
         f"{prefix}.detectors",
@@ -965,7 +1020,9 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
         class_slice.drop_last is not None and class_slice.drop_last < 0
     ):
         raise ParametersError(f"{prefix}.class_slice: значения не могут быть отрицательными")
-    return RestoreParameters(version, detectors, solver, class_slice)
+    return RestoreParameters(
+        version, detectors, solver, class_slice, operator, forward_modeling
+    )
 
 
 @dataclass(frozen=True)

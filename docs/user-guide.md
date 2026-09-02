@@ -78,6 +78,11 @@ experiments/<имя_эксперимента>/
 │   │   └── <измерение>.yaml
 │   └── restore_profiles/
 │       └── <профиль>.yaml
+├── input_artifacts/        # необязательные внешние входные артефакты
+│   └── operators/
+│       └── <оператор>/
+│           ├── manifest.yaml
+│           └── ...
 └── output/                 # создаётся программой
 ```
 
@@ -358,7 +363,70 @@ YAML-файлы проверяются строго: неизвестные по
 умолчанию разворачиваются в `used-parameters.yaml`, поэтому в нём видны не
 только явно заданные, но и все реально применённые параметры.
 
-## 11. Типичные проблемы
+## 11. Внешняя аппаратная матрица
+
+По умолчанию восстановление использует результат DARL. Это можно указать явно
+в restore profile:
+
+```yaml
+operator:
+  source: darl
+```
+
+Повторное прямое моделирование сигнала по восстановленному распределению
+управляется отдельной секцией restore profile:
+
+```yaml
+forward_modeling:
+  enabled: false
+```
+
+По умолчанию моделирование отключено, поскольку оно может занимать значительное
+время. Значение `true` разрешено только при `operator.source: darl`: для запуска
+программы прямого моделирования требуется конфигурация, созданная этапом DARL.
+
+Чтобы использовать независимо подготовленную матрицу, поместите комплект
+оператора в `input_artifacts/operators/<имя>/` и выберите его manifest. 
+При этом моделирование сигнала невозможно:
+
+```yaml
+operator:
+  source: file
+  manifest: input_artifacts/operators/external/manifest.yaml
+
+forward_modeling:
+  enabled: false
+```
+
+Пример manifest:
+
+```yaml
+schema_version: 1
+detectors:
+  - camera
+  - line_sensor
+signal:
+  value_type: signal
+files:
+  matrix: matrix.npz
+  particle_classes: particle_classes.txt
+  detector_bins:
+    camera: bins_camera.txt
+    line_sensor: bins_line_sensor.txt
+  background_signals:
+    - background_signal.txt
+```
+
+Пути в manifest задаются относительно его каталога и не могут выходить за его
+пределы. NPZ-файл должен содержать массив с ключом `matrix`; форматы классов и
+бинов совпадают с файлами DARL. Оператор должен содержать все детекторы,
+включённые в restore profile.
+
+При `source: file` команда `restore` не читает `output/darl/result.yaml`.
+Калибровка остаётся обязательной, поскольку сигнал формируется из сырых данных.
+Команда `all` пока сохраняет порядок `calibration` → `darl` → `restore`.
+
+## 12. Типичные проблемы
 
 **Программа сообщает, что результат уже существует.** Добавьте `--force`, если
 нужен осознанный пересчёт. Предыдущая версия будет перенесена в архив.

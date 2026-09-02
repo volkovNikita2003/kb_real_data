@@ -33,6 +33,10 @@ experiments/*
 experiments/test_17_07_26_kmk_15/*
 !experiments/test_17_07_26_kmk_15/input_parameters/
 !experiments/test_17_07_26_kmk_15/input_parameters/**
+!experiments/test_17_07_26_kmk_15/input_artifacts/
+experiments/test_17_07_26_kmk_15/input_artifacts/**
+!experiments/test_17_07_26_kmk_15/input_artifacts/**/
+!experiments/test_17_07_26_kmk_15/input_artifacts/**/*.yaml
 
 # The legacy reference calculation contains large copies of camera data.
 # They are kept outside regular Git; scripts, textual parameters and compact

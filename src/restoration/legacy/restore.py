@@ -353,32 +353,33 @@ def run_cfg(cfg:ExperimentConfig):
         )
         plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
 
-        b_restored_distr_reg = get_signal_from_restore_subprocess(
-            classes,
-            restored_distr_reg,
-            cfg.darl_config_name,
-            cfg.dir_save,
-            "reg_",
-        )
-        b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
-        plot_signal(
-            data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
-            cfg.dir_save,
-            f"restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
-        )
-        b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
-            classes,
-            restored_distr_reg_iter,
-            cfg.darl_config_name,
-            cfg.dir_save,
-            "reg_iter_",
-        )
-        b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
-        plot_signal(
-            data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
-            cfg.dir_save,
-            f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
-        )
+        if cfg.forward_modeling_enabled:
+            b_restored_distr_reg = get_signal_from_restore_subprocess(
+                classes,
+                restored_distr_reg,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                "reg_",
+            )
+            b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
+                cfg.dir_save,
+                f"restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+            )
+            b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
+                classes,
+                restored_distr_reg_iter,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                "reg_iter_",
+            )
+            b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
+                cfg.dir_save,
+                f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+            )
 
         plt.figure(figsize=(10, 5))
         plt.plot(sizes, restored_distr_reg, label="reg")
@@ -478,33 +479,34 @@ def run_cfg(cfg:ExperimentConfig):
             )
             plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
 
-            b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
-                classes_cutted,
-                restored_distr_reg_cutted,
-                cfg.darl_config_name,
-                cfg.dir_save,
-                f"cutted_{cut_classes}_reg_",
-            )
-            b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
-            plot_signal(
-                data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
-                cfg.dir_save,
-                f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
-            )
-            
-            b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
-                classes_cutted,
-                restored_distr_reg_iter_cutted,
-                cfg.darl_config_name,
-                cfg.dir_save,
-                f"cutted_{cut_classes}_reg_iter_",
-            )
-            b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
-            plot_signal(
-                data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")], 
-                cfg.dir_save, 
-                f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
-            )
+            if cfg.forward_modeling_enabled:
+                b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
+                    classes_cutted,
+                    restored_distr_reg_cutted,
+                    cfg.darl_config_name,
+                    cfg.dir_save,
+                    f"cutted_{cut_classes}_reg_",
+                )
+                b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
+                plot_signal(
+                    data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
+                    cfg.dir_save,
+                    f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+                )
+
+                b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
+                    classes_cutted,
+                    restored_distr_reg_iter_cutted,
+                    cfg.darl_config_name,
+                    cfg.dir_save,
+                    f"cutted_{cut_classes}_reg_iter_",
+                )
+                b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
+                plot_signal(
+                    data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")],
+                    cfg.dir_save,
+                    f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
+                )
 
             plt.figure(figsize=(10, 5))
             plt.plot(sizes_cutted, restored_distr_reg_cutted, label="reg")
@@ -709,33 +711,34 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
     )
     plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}.png")
 
-    b_restored_distr_reg = get_signal_from_restore_subprocess(
-        classes,
-        restored_distr_reg,
-        cfg.darl_config_name,
-        cfg.dir_save,
-        "reg_",
-    )
-    b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
-    plot_signal(
-        data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
-        cfg.dir_save,
-        f"restored_distr_reg-signal-all-ex_time_{exposure_time}",
-    )
+    if cfg.forward_modeling_enabled:
+        b_restored_distr_reg = get_signal_from_restore_subprocess(
+            classes,
+            restored_distr_reg,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            "reg_",
+        )
+        b_restored_distr_reg_norm = b_restored_distr_reg / np.max(b_restored_distr_reg)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_norm, "restored_distr_reg_norm")],
+            cfg.dir_save,
+            f"restored_distr_reg-signal-all-ex_time_{exposure_time}",
+        )
 
-    b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
-        classes,
-        restored_distr_reg_iter,
-        cfg.darl_config_name,
-        cfg.dir_save,
-        "reg_iter_",
-    )
-    b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
-    plot_signal(
-        data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
-        cfg.dir_save,
-        f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
-    )
+        b_restored_distr_reg_iter = get_signal_from_restore_subprocess(
+            classes,
+            restored_distr_reg_iter,
+            cfg.darl_config_name,
+            cfg.dir_save,
+            "reg_iter_",
+        )
+        b_restored_distr_reg_iter_norm = b_restored_distr_reg_iter / np.max(b_restored_distr_reg_iter)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_iter_norm, "restored_distr_reg_iter_norm")],
+            cfg.dir_save,
+            f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
+        )
 
     plt.figure(figsize=(10, 5))
     plt.plot(sizes, restored_distr_reg, label="reg")
@@ -839,33 +842,34 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
         )
         plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}.png")
 
-        b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
-            classes_cutted,
-            restored_distr_reg_cutted,
-            cfg.darl_config_name,
-            cfg.dir_save,
-            f"cutted_{cut_classes}_reg_",
-        )
-        b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
-        plot_signal(
-            data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
-            cfg.dir_save,
-            f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}",
-        )
+        if cfg.forward_modeling_enabled:
+            b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
+                classes_cutted,
+                restored_distr_reg_cutted,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                f"cutted_{cut_classes}_reg_",
+            )
+            b_restored_distr_reg_cutted_norm = b_restored_distr_reg_cutted / np.max(b_restored_distr_reg_cutted)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_cutted_norm, "restored_distr_reg_norm")],
+                cfg.dir_save,
+                f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}",
+            )
 
-        b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
-            classes_cutted,
-            restored_distr_reg_iter_cutted,
-            cfg.darl_config_name,
-            cfg.dir_save,
-            f"cutted_{cut_classes}_reg_iter_",
-        )
-        b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
-        plot_signal(
-            data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")],
-            cfg.dir_save,
-            f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
-        )
+            b_restored_distr_reg_iter_cutted = get_signal_from_restore_subprocess(
+                classes_cutted,
+                restored_distr_reg_iter_cutted,
+                cfg.darl_config_name,
+                cfg.dir_save,
+                f"cutted_{cut_classes}_reg_iter_",
+            )
+            b_restored_distr_reg_iter_cutted_norm = b_restored_distr_reg_iter_cutted / np.max(b_restored_distr_reg_iter_cutted)
+            plot_signal(
+                data_signal+[(b_restored_distr_reg_iter_cutted_norm, "restored_distr_reg_iter_norm")],
+                cfg.dir_save,
+                f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}",
+            )
 
         plt.figure(figsize=(10, 5))
         plt.plot(sizes_cutted, restored_distr_reg_cutted, label="reg")

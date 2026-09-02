@@ -316,6 +316,42 @@ class RestoreParametersTests(unittest.TestCase):
             self.assertEqual(result.detectors.line_sensor.time_offset_us, 2.0)
             self.assertFalse(result.solver.use_w_critical)
             self.assertEqual(result.solver.w_critical, 1e-3)
+            self.assertFalse(result.forward_modeling.enabled)
+
+    def test_forward_modeling_is_loaded_for_darl_operator(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "default.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "operator": {"source": "darl"},
+                    "forward_modeling": {"enabled": True},
+                    "detectors": {"camera": {}},
+                },
+            )
+
+            result = load_restore_parameters(path)
+
+            self.assertTrue(result.forward_modeling.enabled)
+
+    def test_file_operator_rejects_forward_modeling(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "default.yaml"
+            dump(
+                path,
+                {
+                    "schema_version": 1,
+                    "operator": {"source": "file", "manifest": "manifest.yaml"},
+                    "forward_modeling": {"enabled": True},
+                    "detectors": {"camera": {}},
+                },
+            )
+
+            with self.assertRaisesRegex(
+                ParametersError, "должно быть false.*operator.source: file"
+            ):
+                load_restore_parameters(path)
 
     def test_complete_detector_processing_settings_are_loaded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

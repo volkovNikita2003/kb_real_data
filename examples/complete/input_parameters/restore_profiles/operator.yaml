@@ -2,11 +2,12 @@
 schema_version: 1
 
 # Источник аппаратной матрицы. Возможные значения:
-# operator.source: darl
-# operator.source: file (смотри профиль operator.yaml)
+# operator.source: darl (смотри профиль default.yaml)
+# operator.source: file
 # Если секция отсутствует, используется режим darl для обратной совместимости.
 operator:
-  source: darl
+  source: file
+  manifest: input_artifacts/operators/matrix/manifest.yaml
 
 # Повторно рассчитать сигналы детекторов для восстановленного распределения.
 # Операция выполняется отдельной программой прямого моделирования и может быть

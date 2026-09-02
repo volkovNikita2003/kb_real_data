@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from typing import Iterable, Literal, Sequence
 
+import numpy as np
+
 from calibration.refactoring.result import CalibrationResult
 from darl.result import DarlResult
 from errors import ExperimentStructureError, ParametersError
@@ -19,6 +21,7 @@ from parameters import (
     RestoreParameters,
     load_measurement_parameters,
 )
+from restoration.operator import ForwardOperator, from_darl
 
 
 EXPOSURE_PATTERN = re.compile(r"^[1-9][0-9]*$", re.ASCII)
@@ -672,39 +675,6 @@ def validate_darl_inputs(
     return report.build()
 
 
-def _validate_darl_artifact(
-    experiment: Experiment,
-    relative_path: str,
-    report: _ReportBuilder,
-    *,
-    code: str,
-    location: str,
-    measurement: str,
-    restore_profile: str,
-) -> None:
-    root = experiment.darl_output_dir.resolve()
-    candidate = (root / relative_path).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        report.add(
-            "error", code,
-            f"{location}: путь выходит за пределы output/darl",
-            path=candidate,
-            measurement=measurement,
-            restore_profile=restore_profile,
-        )
-        return
-    if not candidate.is_file():
-        report.add(
-            "error", code,
-            f"{location}: не найден обязательный файл",
-            path=candidate,
-            measurement=measurement,
-            restore_profile=restore_profile,
-        )
-
-
 def validate_restore_inputs(
     experiment: Experiment,
     *,
@@ -713,9 +683,14 @@ def validate_restore_inputs(
     general: GeneralParameters,
     restore: RestoreParameters,
     calibration: CalibrationResult,
-    darl: DarlResult,
+    operator: ForwardOperator | None = None,
+    darl: DarlResult | None = None,
 ) -> ValidationReport:
     """Validate one independent profile/measurement restoration run."""
+    if operator is None:
+        if darl is None:
+            raise ValueError("Не задан аппаратный оператор")
+        operator = from_darl(experiment, darl)
     report = _ReportBuilder()
     detectors = restore.detectors.names()
     context = {
@@ -774,13 +749,13 @@ def validate_restore_inputs(
             path=experiment.calibration_result_file, **context,
         )
 
-    missing_darl = detectors - set(darl.detectors)
-    if missing_darl:
+    missing_operator = detectors - set(operator.detectors)
+    if missing_operator:
         report.add(
-            "error", "restore_detector_missing_in_darl",
-            "В результате DARL отсутствуют детекторы: "
-            + ", ".join(sorted(missing_darl)),
-            path=experiment.darl_result_file, **context,
+            "error", "restore_detector_missing_in_operator",
+            "В аппаратном операторе отсутствуют детекторы: "
+            + ", ".join(sorted(missing_operator)),
+            path=operator.manifest_file or experiment.darl_result_file, **context,
         )
 
     data = _validate_measurement_base(
@@ -790,61 +765,84 @@ def validate_restore_inputs(
     _validate_line_pair(data, profile, restore, report)
 
     artifacts = (
-        (darl.matrix_file, "missing_darl_matrix", "darl.result.matrix_file"),
-        (
-            darl.particle_classes_file,
-            "missing_darl_particle_classes",
-            "darl.result.particle_classes_file",
-        ),
+        (operator.matrix_file, "missing_operator_matrix", "operator.matrix_file"),
+        (operator.particle_classes_file, "missing_operator_particle_classes",
+         "operator.particle_classes_file"),
     )
-    for relative_path, code, location in artifacts:
-        _validate_darl_artifact(
-            experiment, relative_path, report, code=code, location=location,
-            **context,
-        )
-
-    detector_bin_names = {
-        "camera": "bins_front_detector.txt",
-        "line_sensor": "FrontDetectorLogLine_detector.txt",
-    }
-    available_bins = set(darl.detector_bin_files)
-    for detector in sorted(detectors & detector_bin_names.keys()):
-        filename = detector_bin_names[detector]
-        if filename not in available_bins:
+    for path, code, location in artifacts:
+        if not path.is_file():
             report.add(
-                "error", "missing_darl_detector_bins",
-                f"В result.yaml не указан файл бинов детектора {detector}",
-                path=experiment.darl_result_file, **context,
+                "error", code, f"{location}: не найден обязательный файл",
+                path=path, **context,
             )
-            continue
-        _validate_darl_artifact(
-            experiment, filename, report,
-            code="missing_darl_detector_bins",
-            location=f"darl.result.detector_bin_files.{detector}",
-            **context,
-        )
+    for detector in sorted(detectors):
+        path = operator.detector_bin_files.get(detector)
+        if path is None or not path.is_file():
+            report.add(
+                "error", "missing_operator_detector_bins",
+                f"Не найден файл бинов детектора {detector}",
+                path=path or (operator.manifest_file or profile.path), **context,
+            )
 
-    expected = [item for item in darl.distributions if item.name == measurement.name]
-    if not expected:
+    if operator.source == "file" and all(
+        path.is_file()
+        for path in (
+            operator.matrix_file,
+            operator.particle_classes_file,
+            *(operator.detector_bin_files.get(name, Path()) for name in detectors),
+        )
+    ):
+        try:
+            with np.load(operator.matrix_file) as archive:
+                if "matrix" not in archive:
+                    raise ValueError("NPZ не содержит массив с ключом 'matrix'")
+                matrix = archive["matrix"]
+            if matrix.ndim != 2:
+                raise ValueError("аппаратная матрица должна быть двумерной")
+            if not np.issubdtype(matrix.dtype, np.number) or not np.isfinite(matrix).all():
+                raise ValueError("аппаратная матрица должна содержать конечные числа")
+            class_count = sum(
+                1 for line in operator.particle_classes_file.read_text().splitlines()
+                if line.strip()
+            )
+            bin_count = 0
+            for detector in detectors:
+                lines = [
+                    line for line in operator.detector_bin_files[detector]
+                    .read_text().splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")
+                ]
+                if detector == "line_sensor" and lines:
+                    lines = lines[1:]
+                bin_count += len(lines)
+            if matrix.shape[1] != class_count:
+                raise ValueError(
+                    f"число столбцов матрицы ({matrix.shape[1]}) не равно "
+                    f"числу классов ({class_count})"
+                )
+            if matrix.shape[0] != bin_count:
+                raise ValueError(
+                    f"число строк матрицы ({matrix.shape[0]}) не равно "
+                    f"числу бинов ({bin_count})"
+                )
+        except (OSError, ValueError) as error:
+            report.add(
+                "error", "invalid_operator_artifacts", str(error),
+                path=operator.manifest_file, **context,
+            )
+
+    expected = operator.expected_signal(measurement.name)
+    if expected is None:
         report.add(
             "warning", "missing_expected_signal",
             "Для измерения нет смоделированного ожидаемого сигнала; "
             "сравнение сигналов будет пропущено",
-            path=experiment.darl_result_file, **context,
+            path=operator.manifest_file or experiment.darl_result_file, **context,
         )
-    elif len(expected) > 1:
+    elif not expected.is_file():
         report.add(
-            "error", "duplicate_expected_signal",
-            "В result.yaml несколько ожидаемых сигналов с именем измерения",
-            path=experiment.darl_result_file, **context,
-        )
-    else:
-        _validate_darl_artifact(
-            experiment, expected[0].modeled_signal, report,
-            code="missing_expected_signal_file",
-            location=(
-                f"darl.result.distributions.{measurement.name}.modeled_signal"
-            ),
-            **context,
+            "error", "missing_expected_signal_file",
+            "Не найден файл смоделированного ожидаемого сигнала",
+            path=expected, **context,
         )
     return report.build()

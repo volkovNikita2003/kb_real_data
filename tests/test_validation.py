@@ -554,7 +554,7 @@ class RestoreValidationTests(unittest.TestCase):
             report = self._validate(inputs)
             self.assertEqual(
                 {issue.code for issue in report.errors},
-                {"missing_darl_matrix", "missing_darl_detector_bins"},
+                {"missing_operator_matrix", "missing_operator_detector_bins"},
             )
 
     def test_missing_expected_signal_is_warning(self) -> None:
@@ -581,8 +581,8 @@ class RestoreValidationTests(unittest.TestCase):
                 {issue.code for issue in report.errors},
                 {
                     "restore_detector_missing_in_calibration",
-                    "restore_detector_missing_in_darl",
-                    "missing_darl_detector_bins",
+                    "restore_detector_missing_in_operator",
+                    "missing_operator_detector_bins",
                 },
             )
 

@@ -11,7 +11,7 @@ from errors import ExperimentStructureError
 
 SAFE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$", re.ASCII)
 REQUIRED_ROOT_DIRECTORIES = frozenset({"data", "input_parameters"})
-OPTIONAL_ROOT_DIRECTORIES = frozenset({"output"})
+OPTIONAL_ROOT_DIRECTORIES = frozenset({"output", "input_artifacts"})
 ALLOWED_ROOT_DIRECTORIES = REQUIRED_ROOT_DIRECTORIES | OPTIONAL_ROOT_DIRECTORIES
 
 
@@ -131,6 +131,14 @@ class Experiment:
     @property
     def output_dir(self) -> Path:
         return self.path / "output"
+
+    @property
+    def input_artifacts_dir(self) -> Path:
+        return self.path / "input_artifacts"
+
+    @property
+    def operators_dir(self) -> Path:
+        return self.input_artifacts_dir / "operators"
 
     @property
     def calibration_dir(self) -> Path:
