@@ -1,4 +1,6 @@
 schema_version: 1
+forward_modeling:
+  enabled: true
 detectors:
   camera:
     use_background: true
