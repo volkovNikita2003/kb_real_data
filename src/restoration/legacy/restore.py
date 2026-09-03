@@ -75,6 +75,25 @@ def get_signal_from_restore_subprocess(
     return np.asarray(payload)
 
 
+def load_signal_vector(filename: Path, *, expected_size: int) -> np.ndarray:
+    """Load a ready inverse-problem right-hand side from ``b.txt``."""
+    values = np.asarray(np.loadtxt(filename), dtype=np.float64)
+    if values.ndim == 0:
+        values = values.reshape(1)
+    if values.ndim != 1:
+        raise ValueError(f"{filename}: ожидался одномерный вектор")
+    if values.size == 0:
+        raise ValueError(f"{filename}: сигнальный вектор пуст")
+    if not np.isfinite(values).all():
+        raise ValueError(f"{filename}: сигнальный вектор содержит NaN или Inf")
+    if values.size != expected_size:
+        raise ValueError(
+            f"{filename}: длина вектора {values.size} не равна числу строк "
+            f"аппаратной матрицы {expected_size}"
+        )
+    return values
+
+
 def plot_signal(data, dir_save, filename_save):
     plt.figure(figsize=(10, 5))
     b_save = []
@@ -176,6 +195,11 @@ def run_cfg(cfg:ExperimentConfig):
     A = np.load(cfg.file_matrix)["matrix"].astype(np.float64)
     classes = read_classes(cfg.file_classes)
 
+    if len(bins_cam) + len(bins_lin) != A.shape[0]:
+        raise ValueError(
+            "Число бинов камеры и линейки не равно числу строк аппаратной матрицы"
+        )
+
     cut_classes = cfg.cut_classes
     cut_classes_top = cfg.cut_classes_top
     if not(cut_classes is None and cut_classes_top is None):
@@ -183,46 +207,55 @@ def run_cfg(cfg:ExperimentConfig):
         classes_cutted = classes[cut_classes:cut_classes_top]
 
 
-    signal_cam, cam_mask_valid = get_signal_cam_hdr(cfg)
-    print_cam_pix_valid_per_bin(
-        cam_mask_valid,
-        bins_cam,
-        cfg.cam_pixel_width_m,
-        get_laser_center_pos_pix(
-            cfg.detector_configuration_type,
-            signal_cam.shape,
-            cfg.x_shift_pix,
-            cfg.y_shift_pix,
-        ),
-        cfg.dir_save,
-    )
+    file_signal = None
+    if cfg.signal_vector_file is not None:
+        file_signal = load_signal_vector(
+            cfg.signal_vector_file, expected_size=A.shape[0]
+        )
+        camera_bin_count = len(bins_cam)
+        b_cam_norm = file_signal[:camera_bin_count]
+        b_cam = b_cam_norm
+    else:
+        signal_cam, cam_mask_valid = get_signal_cam_hdr(cfg)
+        print_cam_pix_valid_per_bin(
+            cam_mask_valid,
+            bins_cam,
+            cfg.cam_pixel_width_m,
+            get_laser_center_pos_pix(
+                cfg.detector_configuration_type,
+                signal_cam.shape,
+                cfg.x_shift_pix,
+                cfg.y_shift_pix,
+            ),
+            cfg.dir_save,
+        )
 
-    if cfg.cam_hdr_filtered:
-        signal_cam = gaussian_filter(signal_cam, sigma=(cfg.cam_hdr_gauss_sigma, cfg.cam_hdr_gauss_sigma))
+        if cfg.cam_hdr_filtered:
+            signal_cam = gaussian_filter(signal_cam, sigma=(cfg.cam_hdr_gauss_sigma, cfg.cam_hdr_gauss_sigma))
 
-    dir_save=cfg.dir_save/"signal-img/"
-    dir_save.mkdir(exist_ok=True, parents=True)
-    plot_cam_signal_valid(
-        signal_cam,
-        cam_mask_valid,
-        dir_save/f"signal-hdr-valid-ex_time_{exposure_time}.png",
-    )
+        dir_save=cfg.dir_save/"signal-img/"
+        dir_save.mkdir(exist_ok=True, parents=True)
+        plot_cam_signal_valid(
+            signal_cam,
+            cam_mask_valid,
+            dir_save/f"signal-hdr-valid-ex_time_{exposure_time}.png",
+        )
 
-    b_cam = get_signal_cam(
-        bins_cam,
-        None,
-        None,
-        cam_pixel_width_m=cfg.cam_pixel_width_m,
-        data=signal_cam,
-        x_shift_pix=cfg.x_shift_pix,
-        y_shift_pix=cfg.y_shift_pix,
-        plotted=True,
-        path_save_dir=cfg.dir_save/"signal-img/",
-        postfix=f"{exposure_time}",
-        signal_type=cfg.signal_type,
-        detector_configuration_type=cfg.detector_configuration_type,
-    )
-    b_cam_norm = b_cam/exposure_time
+        b_cam = get_signal_cam(
+            bins_cam,
+            None,
+            None,
+            cam_pixel_width_m=cfg.cam_pixel_width_m,
+            data=signal_cam,
+            x_shift_pix=cfg.x_shift_pix,
+            y_shift_pix=cfg.y_shift_pix,
+            plotted=True,
+            path_save_dir=cfg.dir_save/"signal-img/",
+            postfix=f"{exposure_time}",
+            signal_type=cfg.signal_type,
+            detector_configuration_type=cfg.detector_configuration_type,
+        )
+        b_cam_norm = b_cam/exposure_time
 
     plt.figure(figsize=(10, 5))
     plt.plot(b_cam, marker="o")
@@ -244,26 +277,31 @@ def run_cfg(cfg:ExperimentConfig):
 
     for exposure_time_us_lin in cfg.exposure_time_us_lin_arr:
         print(f"\nexposure_time_us_lin={exposure_time_us_lin}")
-        filename_lin = cfg.dir_signal_lin / cfg.filename_lin_template.format(exposure_time_us_lin)
-        filename_lin_back = None
-        if cfg.dir_back_lin is not None:
-            filename_lin_back = cfg.dir_back_lin/cfg.filename_lin_back_template.format(exposure_time_us_lin)
-        b_lin, _ = get_signal_lin(
-            bins_lin,
-            filename_lin,
-            filename_lin_back,
-            num_pix=cfg.num_pix_lin,
-            shift_lin_m=cfg.shift_lin_m,
-            pix_max_ampl=cfg.pix_max_ampl,
-            width_pix_x_m=cfg.width_pix_x_m,
-            width_pix_y_m=cfg.width_pix_y_m,
-            signal_type=cfg.signal_type,
-            mode=cfg.lin_signal_mode,
-            path_save_dir=cfg.dir_save,
-        )
+        if file_signal is not None:
+            b_lin_norm = file_signal[len(bins_cam):]
+            b_lin = b_lin_norm
+            b = file_signal
+        else:
+            filename_lin = cfg.dir_signal_lin / cfg.filename_lin_template.format(exposure_time_us_lin)
+            filename_lin_back = None
+            if cfg.dir_back_lin is not None:
+                filename_lin_back = cfg.dir_back_lin/cfg.filename_lin_back_template.format(exposure_time_us_lin)
+            b_lin, _ = get_signal_lin(
+                bins_lin,
+                filename_lin,
+                filename_lin_back,
+                num_pix=cfg.num_pix_lin,
+                shift_lin_m=cfg.shift_lin_m,
+                pix_max_ampl=cfg.pix_max_ampl,
+                width_pix_x_m=cfg.width_pix_x_m,
+                width_pix_y_m=cfg.width_pix_y_m,
+                signal_type=cfg.signal_type,
+                mode=cfg.lin_signal_mode,
+                path_save_dir=cfg.dir_save,
+            )
 
-        b_lin_norm = b_lin/(exposure_time_us_lin+cfg.lin_time_add)*cfg.coef_lin_to_cam
-        b = np.hstack((b_cam_norm, b_lin_norm))
+            b_lin_norm = b_lin/(exposure_time_us_lin+cfg.lin_time_add)*cfg.coef_lin_to_cam
+            b = np.hstack((b_cam_norm, b_lin_norm))
         b_real_norm = b / np.max(b)
 
         data_signal = [(b_real_norm, "real_norm")]
@@ -628,34 +666,40 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
         names=["r_in_m", "r_out_m"],
     )
 
-    signal_cam, cam_mask_valid = get_signal_cam_hdr(cfg)
+    if cfg.signal_vector_file is not None:
+        b_cam_norm = load_signal_vector(
+            cfg.signal_vector_file, expected_size=len(bins_cam)
+        )
+        b_cam = b_cam_norm
+    else:
+        signal_cam, cam_mask_valid = get_signal_cam_hdr(cfg)
 
-    if cfg.cam_hdr_filtered:
-        signal_cam = gaussian_filter(signal_cam, sigma=(cfg.cam_hdr_gauss_sigma, cfg.cam_hdr_gauss_sigma))
+        if cfg.cam_hdr_filtered:
+            signal_cam = gaussian_filter(signal_cam, sigma=(cfg.cam_hdr_gauss_sigma, cfg.cam_hdr_gauss_sigma))
 
-    dir_save=cfg.dir_save/"signal-img/"
-    dir_save.mkdir(exist_ok=True, parents=True)
-    plot_cam_signal_valid(
-        signal_cam,
-        cam_mask_valid,
-        dir_save/f"signal-hdr-valid-ex_time_{exposure_time}.png",
-    )
+        dir_save=cfg.dir_save/"signal-img/"
+        dir_save.mkdir(exist_ok=True, parents=True)
+        plot_cam_signal_valid(
+            signal_cam,
+            cam_mask_valid,
+            dir_save/f"signal-hdr-valid-ex_time_{exposure_time}.png",
+        )
 
-    b_cam = get_signal_cam(
-        bins_cam,
-        None,
-        None,
-        data=signal_cam,
-        cam_pixel_width_m=cfg.cam_pixel_width_m,
-        x_shift_pix=cfg.x_shift_pix,
-        y_shift_pix=cfg.y_shift_pix,
-        plotted=True,
-        path_save_dir=cfg.dir_save/"signal-img/",
-        postfix=f"{exposure_time}",
-        signal_type=cfg.signal_type,
-        detector_configuration_type=cfg.detector_configuration_type,
-    )
-    b_cam_norm = b_cam/exposure_time
+        b_cam = get_signal_cam(
+            bins_cam,
+            None,
+            None,
+            data=signal_cam,
+            cam_pixel_width_m=cfg.cam_pixel_width_m,
+            x_shift_pix=cfg.x_shift_pix,
+            y_shift_pix=cfg.y_shift_pix,
+            plotted=True,
+            path_save_dir=cfg.dir_save/"signal-img/",
+            postfix=f"{exposure_time}",
+            signal_type=cfg.signal_type,
+            detector_configuration_type=cfg.detector_configuration_type,
+        )
+        b_cam_norm = b_cam/exposure_time
 
     lin_cut = b_cam_norm.shape[0]
 

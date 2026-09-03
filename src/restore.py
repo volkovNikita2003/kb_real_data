@@ -85,6 +85,14 @@ def _measurement_inputs(
     measurement: Measurement,
     restore: RestoreParameters,
 ) -> tuple[dict[str, object], tuple[int, ...], int | None]:
+    if measurement.signal_vector_file.is_file():
+        result = {
+            "signal_vector_file": measurement.signal_vector_file.relative_to(
+                experiment.path
+            ).as_posix()
+        }
+        # Legacy plot names contain exposure values even when raw data are not read.
+        return result, (1,), 1 if restore.detectors.line_sensor is not None else None
     camera_exposures = _exposures(measurement.camera_dir, ".bmp")
     camera = restore.detectors.camera
     assert camera is not None

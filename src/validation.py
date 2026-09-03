@@ -30,6 +30,7 @@ ALLOWED_INPUT_PARAMETER_ENTRIES = frozenset(
 )
 ALLOWED_CALIBRATION_DIRECTORIES = frozenset({"cam", "lin"})
 ALLOWED_MEASUREMENT_DIRECTORIES = frozenset({"cam", "cam_back", "lin", "lin_back"})
+ALLOWED_MEASUREMENT_FILES = frozenset({"b.txt"})
 Severity = Literal["error", "warning"]
 
 
@@ -338,6 +339,15 @@ def _validate_measurement_base(
     restore_profile: str | None = None,
 ) -> _MeasurementData:
     for entry in sorted(measurement.path.iterdir(), key=lambda item: item.name):
+        if entry.name in ALLOWED_MEASUREMENT_FILES:
+            if not entry.is_file():
+                report.add(
+                    "error", "signal_vector_not_file",
+                    "b.txt должен быть обычным файлом",
+                    path=entry, measurement=measurement.name,
+                    restore_profile=restore_profile,
+                )
+            continue
         if entry.name not in ALLOWED_MEASUREMENT_DIRECTORIES:
             report.add(
                 "error",
@@ -356,6 +366,25 @@ def _validate_measurement_base(
             )
 
     detectors = frozenset(detector_names)
+    if measurement.signal_vector_file.is_file():
+        try:
+            vector = np.asarray(
+                np.loadtxt(measurement.signal_vector_file), dtype=np.float64
+            )
+            if vector.ndim == 0:
+                vector = vector.reshape(1)
+            if vector.ndim != 1 or vector.size == 0:
+                raise ValueError("ожидался непустой одномерный вектор")
+            if not np.isfinite(vector).all():
+                raise ValueError("вектор содержит NaN или Inf")
+        except (OSError, ValueError) as error:
+            report.add(
+                "error", "invalid_signal_vector_file", str(error),
+                path=measurement.signal_vector_file,
+                measurement=measurement.name,
+                restore_profile=restore_profile,
+            )
+        return _MeasurementData(measurement, None, None, None, None)
     signal_specs = (
         (
             "camera",
@@ -444,6 +473,8 @@ def _validate_camera_pair(
     restore: RestoreParameters,
     report: _ReportBuilder,
 ) -> None:
+    if data.measurement.signal_vector_file.is_file():
+        return
     settings = restore.detectors.camera
     if settings is None:
         return
@@ -499,6 +530,8 @@ def _validate_line_pair(
     restore: RestoreParameters,
     report: _ReportBuilder,
 ) -> None:
+    if data.measurement.signal_vector_file.is_file():
+        return
     settings = restore.detectors.line_sensor
     if settings is None:
         return

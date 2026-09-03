@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
+
+import numpy as np
 
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
@@ -20,6 +23,22 @@ from restoration.legacy import restore as legacy_restore
 
 
 class LegacyRestoreRunnerTests(unittest.TestCase):
+    def test_loads_ready_signal_vector(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "b.txt"
+            path.write_text("1\n2\n3\n", encoding="utf-8")
+
+            result = legacy_restore.load_signal_vector(path, expected_size=3)
+
+            np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0]))
+
+    def test_ready_signal_vector_size_must_match_matrix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "b.txt"
+            path.write_text("1\n2\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "числу строк"):
+                legacy_restore.load_signal_vector(path, expected_size=3)
+
     def _artifact(self, mode: str) -> LegacyRestoreConfigArtifact:
         return LegacyRestoreConfigArtifact(
             config=ExperimentConfig(),

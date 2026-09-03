@@ -546,6 +546,44 @@ class RestoreValidationTests(unittest.TestCase):
             report = self._validate(self._inputs(Path(directory), with_line=True))
             self.assertEqual(report.issues, ())
 
+    def test_signal_vector_replaces_raw_detector_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = self._inputs(Path(directory), with_line=True)
+            measurement = inputs[1]
+            for child in tuple(measurement.path.iterdir()):
+                if child.is_dir():
+                    for file in child.iterdir():
+                        file.unlink()
+                    child.rmdir()
+            measurement.signal_vector_file.write_text(
+                "1\n2\n", encoding="utf-8"
+            )
+
+            report = self._validate(inputs)
+
+            self.assertNotIn(
+                "unknown_measurement_entry",
+                {issue.code for issue in report.errors},
+            )
+            self.assertNotIn(
+                "missing_detector_data",
+                {issue.code for issue in report.errors},
+            )
+
+    def test_invalid_signal_vector_is_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            inputs = self._inputs(Path(directory))
+            inputs[1].signal_vector_file.write_text(
+                "not-a-number\n", encoding="utf-8"
+            )
+
+            report = self._validate(inputs)
+
+            self.assertIn(
+                "invalid_signal_vector_file",
+                {issue.code for issue in report.errors},
+            )
+
     def test_missing_mandatory_darl_artifacts_are_errors(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             inputs = self._inputs(Path(directory))

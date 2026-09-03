@@ -115,6 +115,9 @@ class ExperimentConfig:
     signal_type: str = "signal"
 
 
+    signal_vector_file_rel: str | None = None
+
+
     # восстановление
     use_w_critical: bool = False
     use_chahine: bool = True
@@ -130,6 +133,12 @@ class ExperimentConfig:
         if self.dir_signal_rel is None:
             return None
         return self.dir_case / self.dir_signal_rel
+
+    @property
+    def signal_vector_file(self):
+        if self.signal_vector_file_rel is None:
+            return None
+        return self.dir_case / self.signal_vector_file_rel
 
     @property
     def dir_back(self):

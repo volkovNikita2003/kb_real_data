@@ -76,6 +76,10 @@ class ExperimentTests(unittest.TestCase):
                 measurement.line_background_dir,
                 path / "data/kmk_15/lin_back",
             )
+            self.assertEqual(
+                measurement.signal_vector_file,
+                path / "data/kmk_15/b.txt",
+            )
 
     def test_restore_profiles_are_sorted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

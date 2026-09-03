@@ -49,6 +49,10 @@ class Measurement:
     def line_background_dir(self) -> Path:
         return self.path / "lin_back"
 
+    @property
+    def signal_vector_file(self) -> Path:
+        return self.path / "b.txt"
+
 
 @dataclass(frozen=True)
 class RestoreProfile:

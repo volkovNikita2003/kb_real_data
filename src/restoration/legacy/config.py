@@ -185,6 +185,14 @@ def build_legacy_restore_config(
             )
             if camera_restore.use_background else None
         ),
+        signal_vector_file_rel=(
+            _relative_to_experiment(
+                experiment,
+                measurement.signal_vector_file,
+                location="measurement.signal_vector_file",
+            )
+            if measurement.signal_vector_file.is_file() else None
+        ),
         exposure_time_arr=camera_exposures,
         W=camera_geometry.width_px,
         H=camera_geometry.height_px,
