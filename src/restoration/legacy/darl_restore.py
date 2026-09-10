@@ -79,7 +79,15 @@ def get_signal_from_restore(classes, restored_distr, config_name, dir_save: Path
         log(f"Добавлено распределение: {dist_params}")
         distributions.append((dist_type, row, row_index))
     path_save = dir_save/f"{prefix}rect_distribution.png"
-    plotter_single(plot_dist, path_save, state=STATE, figsize=figsize_dist)
+    # plotter_single(plot_dist, path_save, state=STATE, figsize=figsize_dist)
+    fig, ax = plt.subplots(figsize=figsize_dist)
+    plot_dist(fig, ax, state=STATE)
+    ax.plot(x_dist_mean, restored_distr, ":k", label="restored distr")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path_save)
+    plt.close()
+
     log(f"save distribution to {path_save}")
     
     log("Calc indicatrices for rect distribution")

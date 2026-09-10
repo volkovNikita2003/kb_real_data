@@ -97,12 +97,11 @@ def load_signal_vector(filename: Path, *, expected_size: int) -> np.ndarray:
 def plot_signal(data, dir_save, filename_save):
     plt.figure(figsize=(10, 5))
     b_save = []
-    header = ""
     for b, label in data:
         plt.plot(b, marker="o", markersize=3, label=label)
         b_save.append(b)
-        header += f"{label}\t"
-    b_save = np.array(b_save)
+    header = "\t".join(label for _, label in data)
+    b_save = np.array(b_save).T
     plt.xlabel("№ бинa")
     plt.ylabel("Нормированный сигнал")
     plt.grid()
@@ -391,18 +390,24 @@ def run_cfg(cfg:ExperimentConfig):
         )
         plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
 
-        b_restored_distr_reg_matmul = A @ restored_distr_reg
+        b_restored_distr_reg_matmul = A @ restored_gost_reg
         b_restored_distr_reg_matmul /= np.max(b_restored_distr_reg_matmul)
+        b_restored_distr_reg_matmul_1 = A @ restored_distr_reg
+        b_restored_distr_reg_matmul_1 /= np.max(b_restored_distr_reg_matmul_1)
         plot_signal(
-            data_signal+[(b_restored_distr_reg_matmul, "restored_distr_reg_norm")],
+            data_signal+[(b_restored_distr_reg_matmul, "restored_gost_reg_norm"),
+                         (b_restored_distr_reg_matmul_1, "restored_distr_reg_norm")],
             cfg.dir_save,
             f"restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
         )
 
-        b_restored_distr_reg_iter_matmul = A @ restored_distr_reg_iter
+        b_restored_distr_reg_iter_matmul = A @ restored_gost_reg_iter
         b_restored_distr_reg_iter_matmul /= np.max(b_restored_distr_reg_iter_matmul)
+        b_restored_distr_reg_iter_matmul_1 = A @ restored_distr_reg_iter
+        b_restored_distr_reg_iter_matmul_1 /= np.max(b_restored_distr_reg_iter_matmul_1)
         plot_signal(
-            data_signal+[(b_restored_distr_reg_iter_matmul, "restored_distr_reg_iter_norm")],
+            data_signal+[(b_restored_distr_reg_iter_matmul, "restored_gost_reg_iter_norm"),
+                         (b_restored_distr_reg_iter_matmul_1, "restored_distr_reg_iter_norm")],
             cfg.dir_save,
             f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
         )
@@ -533,18 +538,24 @@ def run_cfg(cfg:ExperimentConfig):
             )
             plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}.png")
 
-            b_restored_distr_reg_cutted_matmul = A_cutted @ restored_distr_reg_cutted
+            b_restored_distr_reg_cutted_matmul = A_cutted @ restored_gost_reg_cutted
             b_restored_distr_reg_cutted_matmul /= np.max(b_restored_distr_reg_cutted_matmul)
+            b_restored_distr_reg_cutted_matmul_1 = A_cutted @ restored_distr_reg_cutted
+            b_restored_distr_reg_cutted_matmul_1 /= np.max(b_restored_distr_reg_cutted_matmul_1)
             plot_signal(
-                data_signal+[(b_restored_distr_reg_cutted_matmul, "restored_distr_reg_norm")],
+                data_signal+[(b_restored_distr_reg_cutted_matmul, "restored_gost_reg_norm"),
+                             (b_restored_distr_reg_cutted_matmul_1, "restored_distr_reg_norm")],
                 cfg.dir_save,
                 f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
             )
             
-            b_restored_distr_reg_iter_cutted_matmul = A_cutted @ restored_distr_reg_iter_cutted
+            b_restored_distr_reg_iter_cutted_matmul = A_cutted @ restored_gost_reg_iter_cutted
             b_restored_distr_reg_iter_cutted_matmul /= np.max(b_restored_distr_reg_iter_cutted_matmul)
+            b_restored_distr_reg_iter_cutted_matmul_1 = A_cutted @ restored_distr_reg_iter_cutted
+            b_restored_distr_reg_iter_cutted_matmul_1 /= np.max(b_restored_distr_reg_iter_cutted_matmul_1)
             plot_signal(
-                data_signal+[(b_restored_distr_reg_iter_cutted_matmul, "restored_distr_reg_iter_norm")],
+                data_signal+[(b_restored_distr_reg_iter_cutted_matmul, "restored_gost_reg_iter_norm"),
+                             (b_restored_distr_reg_iter_cutted_matmul_1, "restored_distr_reg_iter_norm")],
                 cfg.dir_save,
                 f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}-ex_time_lin_{exposure_time_us_lin}"
             )
@@ -787,6 +798,22 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
     )
     plot_gcv_curve(gcv_curve, alpha_reg, cfg.dir_save/f"gcv_curve-ex_time_{exposure_time}.png")
 
+    b_restored_distr_reg_matmul = A @ restored_gost_reg
+    b_restored_distr_reg_matmul /= np.max(b_restored_distr_reg_matmul)
+    plot_signal(
+        data_signal+[(b_restored_distr_reg_matmul, "restored_distr_reg_norm")],
+        cfg.dir_save,
+        f"restored_distr_reg-signal-all-ex_time_{exposure_time}"
+    )
+    
+    b_restored_distr_reg_iter_matmul = A @ restored_gost_reg_iter
+    b_restored_distr_reg_iter_matmul /= np.max(b_restored_distr_reg_iter_matmul)
+    plot_signal(
+        data_signal+[(b_restored_distr_reg_iter_matmul, "restored_distr_reg_iter_norm")],
+        cfg.dir_save,
+        f"restored_distr_reg_iter-signal-all-ex_time_{exposure_time}"
+    )
+
     if cfg.forward_modeling_enabled:
         b_restored_distr_reg = get_signal_from_restore_subprocess(
             classes,
@@ -917,6 +944,22 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
             alpha_reg_cutted,
         )
         plot_gcv_curve(gcv_curve_cutted, alpha_reg_cutted, cfg.dir_save/f"cutted_{cut_classes}_gcv_curve-ex_time_{exposure_time}.png")
+
+        b_restored_distr_reg_cutted_matmul = A_cutted @ restored_gost_reg_cutted
+        b_restored_distr_reg_cutted_matmul /= np.max(b_restored_distr_reg_cutted_matmul)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_cutted_matmul, "restored_distr_reg_norm")],
+            cfg.dir_save,
+            f"cutted_{cut_classes}_restored_distr_reg-signal-all-ex_time_{exposure_time}"
+        )
+        
+        b_restored_distr_reg_iter_cutted_matmul = A_cutted @ restored_gost_reg_iter_cutted
+        b_restored_distr_reg_iter_cutted_matmul /= np.max(b_restored_distr_reg_iter_cutted_matmul)
+        plot_signal(
+            data_signal+[(b_restored_distr_reg_iter_cutted_matmul, "restored_distr_reg_iter_norm")],
+            cfg.dir_save,
+            f"cutted_{cut_classes}_restored_distr_reg_iter-signal-all-ex_time_{exposure_time}"
+        )
 
         if cfg.forward_modeling_enabled:
             b_restored_distr_reg_cutted = get_signal_from_restore_subprocess(
