@@ -316,6 +316,7 @@ class RestoreParametersTests(unittest.TestCase):
             self.assertEqual(result.detectors.line_sensor.time_offset_us, 2.0)
             self.assertFalse(result.solver.use_w_critical)
             self.assertEqual(result.solver.w_critical, 1e-3)
+            self.assertEqual(result.solver.mode_chahine_q0, "default")
             self.assertFalse(result.forward_modeling.enabled)
 
     def test_forward_modeling_is_loaded_for_darl_operator(self) -> None:
@@ -429,6 +430,23 @@ class RestoreParametersTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ParametersError, "допустимо 1 или 2"):
                 load_restore_parameters(path)
+
+    def test_chahine_q0_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profile.yaml"
+            for mode in ("default", "uniform", "invalid", "", None, 1, True):
+                with self.subTest(mode=mode):
+                    dump(path, {
+                        "schema_version": 1,
+                        "detectors": {"camera": {}},
+                        "solver": {"mode_chahine_q0": mode},
+                    })
+                    if mode in ("default", "uniform"):
+                        result = load_restore_parameters(path)
+                        self.assertEqual(result.solver.mode_chahine_q0, mode)
+                    else:
+                        with self.assertRaisesRegex(ParametersError, "solver.mode_chahine_q0"):
+                            load_restore_parameters(path)
 
     def test_use_w_critical_is_strict_boolean(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

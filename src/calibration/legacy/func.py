@@ -122,6 +122,7 @@ class ExperimentConfig:
     use_w_critical: bool = False
     use_chahine: bool = True
     use_conc_corr: bool = True
+    mode_chahine_q0: str = "default"
     forward_modeling_enabled: bool = False
 
     cut_classes: int = None
@@ -1801,6 +1802,7 @@ def inverse_solver_type_1(
         use_w_critical=True,
         use_chahine=False,
         use_conc_corr=True,
+        mode_chahine_q0="default",
 ):
     print(f"inverse_solver_type_1: {use_w_critical=}, {use_chahine=}, {use_conc_corr=}")
     sizes = np.array([(item[0] + item[1])/2 for item in classes])
@@ -1809,16 +1811,14 @@ def inverse_solver_type_1(
     x_nnls, alpha_reg, gcv_curve = inverse_solver(A, signal)
     print(f"{alpha_reg=:.3e}")
 
-    bin_edges = np.array(classes)
-    bin_mins = bin_edges[:, 0]
-    bin_maxs = bin_edges[:, 1]
-    centers = (bin_mins + bin_maxs)/2
-
     restored_gost_reg = deepcopy(x_nnls)
 
     restored_gost_reg_iter = deepcopy(restored_gost_reg)
     if use_chahine:
-        restored_gost_reg_iter = chahine_inversion(signal, A, num_iter=1000, q0=restored_gost_reg, tol=1e-6, verbose=False)
+        q0 = restored_gost_reg
+        if mode_chahine_q0 == "uniform":
+            q0 = None
+        restored_gost_reg_iter = chahine_inversion(signal, A, num_iter=1000, q0=q0, tol=1e-6, verbose=False)
 
     restored_gost_reg_iter_w = deepcopy(restored_gost_reg_iter)
     if use_w_critical:
@@ -1828,6 +1828,10 @@ def inverse_solver_type_1(
     restored_distr_reg_iter = None
     restored_distr_reg_iter_w = None
     if use_conc_corr:
+        bin_edges = np.array(classes)
+        bin_mins = bin_edges[:, 0]
+        bin_maxs = bin_edges[:, 1]
+        centers = (bin_mins + bin_maxs)/2
         coef = get_count_particles_in_vol_1cm3(centers)
         restored_distr_reg = restored_gost_reg * coef
         restored_distr_reg_iter = restored_gost_reg_iter * coef

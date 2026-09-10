@@ -738,6 +738,7 @@ class SolverParameters:
     use_w_critical: bool = False
     w_critical: float = 1e-3
     use_chahine: bool = True
+    mode_chahine_q0: str = "default"
     use_concentration_correction: bool = True
 
 
@@ -948,6 +949,7 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
             "use_w_critical",
             "w_critical",
             "use_chahine",
+            "mode_chahine_q0",
             "use_concentration_correction",
         },
     )
@@ -987,6 +989,11 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
         use_chahine=_boolean(
             solver_data.get("use_chahine", True),
             f"{prefix}.solver.use_chahine",
+        ),
+        mode_chahine_q0=_choice(
+            solver_data.get("mode_chahine_q0", "default"),
+            f"{prefix}.solver.mode_chahine_q0",
+            {"default", "uniform"},
         ),
         use_concentration_correction=_boolean(
             solver_data.get("use_concentration_correction", True),

@@ -216,6 +216,7 @@ def build_legacy_restore_config(
         signal_type=operator.signal_value_type,
         use_w_critical=restore.solver.use_w_critical,
         use_chahine=restore.solver.use_chahine,
+        mode_chahine_q0=restore.solver.mode_chahine_q0,
         use_conc_corr=restore.solver.use_concentration_correction,
         forward_modeling_enabled=restore.forward_modeling.enabled,
         cut_classes=restore.class_slice.drop_first,

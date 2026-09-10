@@ -199,11 +199,17 @@ solver:
   regularization_alpha: best
   use_w_critical: false
   use_chahine: true
+  mode_chahine_q0: default
   use_concentration_correction: true
 class_slice:
   drop_first: 10
   drop_last: null
 ```
+
+`solver.mode_chahine_q0` — необязательный параметр: `default` (по умолчанию)
+использует результат регуляризованного восстановления как начальное приближение
+итераионного решателя; `uniform` использует равномерное начальное приближение.
+Параметр влияет на расчёт только при `solver.use_chahine: true`.
 
 `regularization_alpha` принимает `best` или положительное число.
 `use_w_critical` включает отсечение малых весовых долей по legacy-порогу и по

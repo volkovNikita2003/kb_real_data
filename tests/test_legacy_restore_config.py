@@ -99,6 +99,7 @@ class LegacyRestoreConfigTests(unittest.TestCase):
                     "use_w_critical": True,
                     "w_critical": 0.002,
                     "use_chahine": False,
+                    "mode_chahine_q0": "uniform",
                     "use_concentration_correction": True,
                 },
                 "class_slice": {"drop_first": 10, "drop_last": 100},
@@ -191,6 +192,7 @@ class LegacyRestoreConfigTests(unittest.TestCase):
             self.assertEqual(cfg.cut_classes, 10)
             self.assertEqual(cfg.cut_classes_top, 100)
             self.assertFalse(cfg.use_chahine)
+            self.assertEqual(cfg.mode_chahine_q0, "uniform")
             self.assertTrue(cfg.use_w_critical)
             self.assertFalse(cfg.forward_modeling_enabled)
             self.assertIsNone(cfg.signal_vector_file_rel)

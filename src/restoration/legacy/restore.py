@@ -374,6 +374,7 @@ def run_cfg(cfg:ExperimentConfig):
             cfg.use_w_critical,
             cfg.use_chahine,
             cfg.use_conc_corr,
+            mode_chahine_q0=cfg.mode_chahine_q0,
         )
         save_reference_restoration(
             cfg.dir_save,
@@ -522,6 +523,7 @@ def run_cfg(cfg:ExperimentConfig):
                 cfg.use_w_critical,
                 cfg.use_chahine,
                 cfg.use_conc_corr,
+                mode_chahine_q0=cfg.mode_chahine_q0,
             )
             save_reference_restoration(
                 cfg.dir_save,
@@ -782,6 +784,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
         cfg.use_w_critical,
         cfg.use_chahine,
         cfg.use_conc_corr,
+        mode_chahine_q0=cfg.mode_chahine_q0,
     )
     save_reference_restoration(
         cfg.dir_save,
@@ -929,6 +932,7 @@ def run_cfg_lin_cut(cfg:ExperimentConfig):
             cfg.use_w_critical,
             cfg.use_chahine,
             cfg.use_conc_corr,
+            mode_chahine_q0=cfg.mode_chahine_q0,
         )
         save_reference_restoration(
             cfg.dir_save,

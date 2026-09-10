@@ -175,6 +175,7 @@ legacy-значения по умолчанию.
 | `REGULARIZATION_TYPE` | `solver.regularization_order` | 1 |
 | `REGULARIZATION_ALPHA` | `solver.regularization_alpha` | `best` |
 | `use_chahine` | `solver.use_chahine` | `true` |
+| `mode_chahine_q0` | `solver.mode_chahine_q0` | `default` |
 | `use_conc_corr` | `solver.use_concentration_correction` | `true` |
 | `use_w_critical` | `solver.use_w_critical` | `false` |
 | `W_CRITICAL` | внутренний параметр совместимости | `1e-3` |
