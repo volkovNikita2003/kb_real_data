@@ -77,7 +77,7 @@ class Experiment:
     path: Path
 
     @classmethod
-    def open(cls, path: str | Path) -> "Experiment":
+    def open(cls, path: str | Path, *, for_acquisition: bool = False) -> "Experiment":
         """Open an experiment and validate its root-level structure."""
         resolved = Path(path).expanduser().resolve()
         if not resolved.exists():
@@ -91,7 +91,8 @@ class Experiment:
 
         validate_safe_name(resolved.name, kind="эксперимента")
         entries = {entry.name: entry for entry in resolved.iterdir()}
-        missing = sorted(REQUIRED_ROOT_DIRECTORIES - entries.keys())
+        required = {"input_parameters"} if for_acquisition else REQUIRED_ROOT_DIRECTORIES
+        missing = sorted(required - entries.keys())
         if missing:
             raise ExperimentStructureError(
                 "В эксперименте отсутствуют обязательные директории: "
@@ -117,7 +118,11 @@ class Experiment:
             )
 
         experiment = cls(path=resolved)
-        experiment._validate_data_root()
+        if for_acquisition:
+            if experiment.data_dir.exists():
+                experiment.measurements()
+        else:
+            experiment._validate_data_root()
         return experiment
 
     @property

@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 import sys
 
+from acquisition import run_line_measurement
 from errors import ExperimentStructureError
 from experiment import Experiment
 from pipeline import (
@@ -52,6 +53,12 @@ def _parser() -> argparse.ArgumentParser:
         description="Запустить этапы обработки реального эксперимента.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    measurement = commands.add_parser("measure_lin", help="измерить сигнал линейки (эмулятор)")
+    measurement.add_argument("experiment", type=Path, help="директория эксперимента")
+    measurement.add_argument("--measurement", required=True, action="append",
+                             help="ровно одно имя измерения")
+    measurement.add_argument("--background", action="store_true", help="измерить фон")
 
     calibration = commands.add_parser(
         "calibration", help="выполнить калибровку детекторов"
@@ -102,8 +109,16 @@ def _print_result(result: StageResult) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "measure_lin" and len(args.measurement) != 1:
+        parser.error("--measurement необходимо указать ровно один раз")
     try:
+        if args.command == "measure_lin":
+            path = run_line_measurement(args.experiment, args.measurement[0],
+                                        background=args.background)
+            print(f"Сигнал линейки сохранён (эмулятор): {path}")
+            return 0
         experiment = Experiment.open(args.experiment)
         common = {
             "force": args.force,

@@ -403,9 +403,20 @@ class ExpectedDistribution:
 
 
 @dataclass(frozen=True)
+class LineSensorAcquisition:
+    exposure_us: int
+
+
+@dataclass(frozen=True)
+class AcquisitionParameters:
+    line_sensor: LineSensorAcquisition | None = None
+
+
+@dataclass(frozen=True)
 class MeasurementParameters:
     schema_version: int
-    expected_distribution: ExpectedDistribution
+    expected_distribution: ExpectedDistribution | None = None
+    acquisition: AcquisitionParameters | None = None
 
 
 @dataclass(frozen=True)
@@ -656,7 +667,7 @@ def load_darl_parameters(path: str | Path) -> DarlParameters:
 def load_measurement_parameters(
     source_file: str | Path | MeasurementParametersFile,
 ) -> MeasurementParameters:
-    """Load an optional measurement-level expected distribution file."""
+    """Load independent modeling and acquisition settings."""
     source = Path(
         source_file.path
         if isinstance(source_file, MeasurementParametersFile)
@@ -665,26 +676,42 @@ def load_measurement_parameters(
     root = _fields(
         _load_yaml(source),
         source.name,
-        required={"schema_version", "expected_distribution"},
+        required={"schema_version"},
+        optional={"expected_distribution", "acquisition"},
     )
     version = _schema(root, source.name)
-    path = f"{source.name}.expected_distribution"
-    data = _fields(
-        root["expected_distribution"],
-        path,
-        required={"type", "mean_nm", "sigma_nm", "particle_count"},
-    )
-    distribution = ExpectedDistribution(
-        type=_choice(data["type"], f"{path}.type", {"gaussian"}),
-        mean_nm=_number(data["mean_nm"], f"{path}.mean_nm", positive=True),
-        sigma_nm=_number(data["sigma_nm"], f"{path}.sigma_nm", positive=True),
-        particle_count=_number(
-            data["particle_count"],
-            f"{path}.particle_count",
-            positive=True,
-        ),
-    )
-    return MeasurementParameters(version, distribution)
+    distribution = None
+    if "expected_distribution" in root:
+        path = f"{source.name}.expected_distribution"
+        data = _fields(
+            root["expected_distribution"],
+            path,
+            required={"type", "mean_nm", "sigma_nm", "particle_count"},
+        )
+        distribution = ExpectedDistribution(
+            type=_choice(data["type"], f"{path}.type", {"gaussian"}),
+            mean_nm=_number(data["mean_nm"], f"{path}.mean_nm", positive=True),
+            sigma_nm=_number(data["sigma_nm"], f"{path}.sigma_nm", positive=True),
+            particle_count=_number(
+                data["particle_count"],
+                f"{path}.particle_count",
+                positive=True,
+            ),
+        )
+    acquisition = None
+    if "acquisition" in root:
+        path = f"{source.name}.acquisition"
+        data = _fields(root["acquisition"], path, optional={"line_sensor"})
+        line_sensor = None
+        if "line_sensor" in data:
+            line = _fields(data["line_sensor"], f"{path}.line_sensor",
+                           required={"exposure_us"})
+            line_sensor = LineSensorAcquisition(
+                exposure_us=_integer(line["exposure_us"],
+                                     f"{path}.line_sensor.exposure_us", positive=True),
+            )
+        acquisition = AcquisitionParameters(line_sensor=line_sensor)
+    return MeasurementParameters(version, distribution, acquisition)
 
 
 @dataclass(frozen=True)
@@ -1102,6 +1129,8 @@ class DarlStageParameters:
                 )
             measurement = load_measurement_parameters(parameters_file.path)
             expected = measurement.expected_distribution
+            if expected is None:
+                continue
             distributions.append(
                 DarlRunDistribution(
                     name=measurement_name,

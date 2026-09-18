@@ -249,7 +249,7 @@ def _validate_parameter_layout(
         except ExperimentStructureError as error:
             report.add("error", "unsafe_measurement_parameter_name", str(error), path=entry)
             continue
-        if entry.stem not in measurement_names:
+        if entry.stem not in measurement_names and entry.stem != "calibration":
             report.add(
                 "error",
                 "unknown_measurement_parameters",
