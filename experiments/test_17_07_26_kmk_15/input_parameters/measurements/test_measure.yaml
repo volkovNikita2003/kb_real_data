@@ -1,0 +1,8 @@
+schema_version: 1
+
+acquisition:
+  line_sensor:
+    exposure_us: 15
+    n: 100
+    device: /dev/ttyACM0
+    pixels: 3648

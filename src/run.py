@@ -54,7 +54,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    measurement = commands.add_parser("measure_lin", help="измерить сигнал линейки (эмулятор)")
+    measurement = commands.add_parser("measure_lin", help="измерить сигнал линейки")
     measurement.add_argument("experiment", type=Path, help="директория эксперимента")
     measurement.add_argument("--measurement", required=True, action="append",
                              help="ровно одно имя измерения")
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "measure_lin":
             path = run_line_measurement(args.experiment, args.measurement[0],
                                         background=args.background)
-            print(f"Сигнал линейки сохранён (эмулятор): {path}")
+            print(f"Сигнал линейки сохранён: {path}")
             return 0
         experiment = Experiment.open(args.experiment)
         common = {

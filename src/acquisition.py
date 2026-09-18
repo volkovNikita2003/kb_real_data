@@ -2,15 +2,41 @@
 
 from pathlib import Path
 import tempfile
+import subprocess
 
 from errors import ParametersError
 from experiment import Experiment, validate_safe_name
-from parameters import load_measurement_parameters
+from parameters import LineSensorAcquisition, load_measurement_parameters
 
 
-def emulate_line_sensor(exposure_us: int, destination: Path) -> None:
-    """Emulate acquisition by writing ten pixel values, one per line."""
-    destination.write_text("".join(f"{pixel}\n" for pixel in range(10)), encoding="utf-8")
+LINE_PROGRAM = Path(__file__).resolve().parents[1] / "build" / "measure_lin"
+
+
+def acquire_line_signal(directory: Path, settings: LineSensorAcquisition) -> Path:
+    """Run the C++ acquisition program in an isolated output directory."""
+    result = (directory / f"{settings.exposure_us}.txt").resolve()
+    command = [str(LINE_PROGRAM), str(settings.n), settings.device,
+               str(settings.exposure_us), str(settings.pixels), str(result)]
+    try:
+        completed = subprocess.run(command, cwd=directory, check=True,
+                       capture_output=True, text=True)
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"Программа {LINE_PROGRAM} не найдена. Выполните cmake -S . -B build "
+            "и cmake --build build --target measure_lin в real_data_auto."
+        ) from error
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"Ошибка получения сигнала линейки (код {error.returncode}): "
+            f"{error.stderr or error.stdout or 'нет диагностического сообщения'}"
+        ) from error
+    # The external void function reports failures on stderr instead of returning
+    # an error status. Do not publish its output when it reports a failure.
+    if completed.stderr.strip():
+        raise RuntimeError(f"Ошибка получения сигнала линейки: {completed.stderr.strip()}")
+    if not result.is_file() or result.stat().st_size == 0:
+        raise RuntimeError("Программа линейки не сохранила сигнал")
+    return result
 
 
 def run_line_measurement(
@@ -25,15 +51,12 @@ def run_line_measurement(
         raise ParametersError(
             f"{source}: для measure_lin необходима секция acquisition.line_sensor"
         )
-    exposure = parameters.acquisition.line_sensor.exposure_us
+    settings = parameters.acquisition.line_sensor
+    exposure = settings.exposure_us
     directory = experiment.data_dir / measurement / ("lin_back" if background else "lin")
     directory.mkdir(parents=True, exist_ok=True)
     destination = directory / f"{exposure}.txt"
-    with tempfile.NamedTemporaryFile(dir=directory, suffix=".tmp", delete=False) as file:
-        temporary = Path(file.name)
-    try:
-        emulate_line_sensor(exposure, temporary)
+    with tempfile.TemporaryDirectory(dir=directory, prefix=".measure_lin-") as staging:
+        temporary = acquire_line_signal(Path(staging), settings)
         temporary.replace(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
     return destination

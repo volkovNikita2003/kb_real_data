@@ -404,7 +404,10 @@ class ExpectedDistribution:
 
 @dataclass(frozen=True)
 class LineSensorAcquisition:
-    exposure_us: int
+    exposure_us: int = 15
+    n: int = 1
+    device: str = "/dev/ttyACM0"
+    pixels: int = 3648
 
 
 @dataclass(frozen=True)
@@ -705,11 +708,22 @@ def load_measurement_parameters(
         line_sensor = None
         if "line_sensor" in data:
             line = _fields(data["line_sensor"], f"{path}.line_sensor",
-                           required={"exposure_us"})
+                           optional={"exposure_us", "n", "device", "pixels"})
             line_sensor = LineSensorAcquisition(
-                exposure_us=_integer(line["exposure_us"],
+                exposure_us=_integer(line.get("exposure_us", 15),
                                      f"{path}.line_sensor.exposure_us", positive=True),
+                n=_integer(line.get("n", 1), f"{path}.line_sensor.n", positive=True),
+                device=_string(line.get("device", "/dev/ttyACM0"),
+                               f"{path}.line_sensor.device"),
+                pixels=_integer(line.get("pixels", 3648),
+                                f"{path}.line_sensor.pixels", positive=True),
             )
+            if line_sensor.n > 2**31 - 1:
+                raise ParametersError(f"{path}.line_sensor.n: превышен диапазон int")
+            if max(line_sensor.exposure_us, line_sensor.pixels) > 2**32 - 1:
+                raise ParametersError(f"{path}.line_sensor: превышен диапазон unsigned int")
+            if "\0" in line_sensor.device:
+                raise ParametersError(f"{path}.line_sensor.device: недопустимый символ NUL")
         acquisition = AcquisitionParameters(line_sensor=line_sensor)
     return MeasurementParameters(version, distribution, acquisition)
 
