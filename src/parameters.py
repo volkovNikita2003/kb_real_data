@@ -68,6 +68,27 @@ class LineSensorDetectorParameters:
 
 
 @dataclass(frozen=True)
+class SideDetectorParameters:
+    pixel_width_m: float
+    angle_deg: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class SideDetectorEnabled:
+    pass
+
+
+def _validate_side_combination(
+    detectors: ExperimentDetectors | DarlDetectors | RestoreDetectors,
+    path: str,
+) -> None:
+    if detectors.side is not None and (
+        detectors.camera is None or detectors.line_sensor is None
+    ):
+        raise ParametersError(f"{path}: side требует camera и line_sensor")
+
+
+@dataclass(frozen=True)
 class ExperimentDetectors:
     camera: CameraDetectorParameters | None = field(
         default=None, metadata={YAML_OMIT_NONE: True}
@@ -76,10 +97,14 @@ class ExperimentDetectors:
         default=None, metadata={YAML_OMIT_NONE: True}
     )
 
+    side: SideDetectorParameters | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+
     def names(self) -> frozenset[str]:
         return frozenset(
             name
-            for name in ("camera", "line_sensor")
+            for name in ("camera", "line_sensor", "side")
             if getattr(self, name) is not None
         )
 
@@ -103,7 +128,7 @@ def load_general_parameters(path: str | Path) -> GeneralParameters:
     detector_data = _fields(
         root["detectors"],
         f"{source.name}.detectors",
-        optional={"camera", "line_sensor"},
+        optional={"camera", "line_sensor", "side"},
     )
 
     camera = None
@@ -138,10 +163,24 @@ def load_general_parameters(path: str | Path) -> GeneralParameters:
             pixel_height_m=_number(data.get("pixel_height_m", 0.0002), f"{path}.pixel_height_m", positive=True),
         )
 
+    side = None
+    if "side" in detector_data:
+        path = f"{source.name}.detectors.side"
+        data = _fields(detector_data["side"], path, required={"pixel_width_m", "angle_deg"})
+        angles = data["angle_deg"]
+        if not isinstance(angles, list) or not angles:
+            raise ParametersError(f"{path}.angle_deg: ожидался непустой массив чисел")
+        side = SideDetectorParameters(
+            _number(data["pixel_width_m"], f"{path}.pixel_width_m", positive=True),
+            tuple(_number(value, f"{path}.angle_deg[{i}]") for i, value in enumerate(angles)),
+        )
+
     detectors = ExperimentDetectors(
         camera=camera,
         line_sensor=line_sensor,
+        side=side,
     )
+    _validate_side_combination(detectors, "detectors")
     if not detectors.names():
         raise ParametersError(
             f"{source.name}.detectors: должен быть указан хотя бы один детектор"
@@ -170,6 +209,7 @@ def load_general_parameters(path: str | Path) -> GeneralParameters:
             positive=True,
         ),
     )
+    _validate_side_files(source, detectors)
     return GeneralParameters(version, detectors, instrument)
 
 
@@ -346,10 +386,14 @@ class DarlDetectors:
         default=None, metadata={YAML_OMIT_NONE: True}
     )
 
+    side: SideDetectorEnabled | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+
     def names(self) -> frozenset[str]:
         return frozenset(
             name
-            for name in ("camera", "line_sensor")
+            for name in ("camera", "line_sensor", "side")
             if getattr(self, name) is not None
         )
 
@@ -454,7 +498,7 @@ class DarlParameters:
 
 
 def _load_darl_detectors(value: Any, path: str) -> DarlDetectors:
-    root = _fields(value, path, optional={"camera", "line_sensor"})
+    root = _fields(value, path, optional={"camera", "line_sensor", "side"})
     camera = None
     if "camera" in root:
         _fields(root["camera"], f"{path}.camera")
@@ -473,7 +517,12 @@ def _load_darl_detectors(value: Any, path: str) -> DarlDetectors:
                 positive=True,
             )
         )
-    result = DarlDetectors(camera, line_sensor)
+    side = None
+    if "side" in root:
+        _fields(root["side"], f"{path}.side")
+        side = SideDetectorEnabled()
+    result = DarlDetectors(camera, line_sensor, side)
+    _validate_side_combination(result, path)
     if not result.names():
         raise ParametersError(f"{path}: должен быть указан хотя бы один детектор")
     return result
@@ -722,10 +771,14 @@ class RestoreDetectors:
         default=None, metadata={YAML_OMIT_NONE: True}
     )
 
+    side: SideDetectorEnabled | None = field(
+        default=None, metadata={YAML_OMIT_NONE: True}
+    )
+
     def names(self) -> frozenset[str]:
         return frozenset(
             name
-            for name in ("camera", "line_sensor")
+            for name in ("camera", "line_sensor", "side")
             if getattr(self, name) is not None
         )
 
@@ -824,7 +877,7 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
     detector_data = _fields(
         root["detectors"],
         f"{prefix}.detectors",
-        optional={"camera", "line_sensor"},
+        optional={"camera", "line_sensor", "side"},
     )
 
     camera = None
@@ -932,10 +985,12 @@ def load_restore_parameters(path: str | Path) -> RestoreParameters:
             ),
         )
 
-    detectors = RestoreDetectors(
-        camera,
-        line_sensor,
-    )
+    side = None
+    if "side" in detector_data:
+        _fields(detector_data["side"], f"{prefix}.detectors.side")
+        side = SideDetectorEnabled()
+    detectors = RestoreDetectors(camera, line_sensor, side)
+    _validate_side_combination(detectors, "detectors")
     if not detectors.names():
         raise ParametersError(f"{prefix}.detectors: должен быть указан хотя бы один детектор")
 
@@ -1054,7 +1109,7 @@ class CalibrationStageParameters:
             name for name in ("camera", "line_sensor")
             if getattr(self.calibration, name) is not None
         )
-        if actual != expected:
+        if actual != expected - {"side"}:
             raise ParametersError(
                 "calibration.yaml: набор секций детекторов должен совпадать "
                 f"с general.yaml; ожидалось {sorted(expected)}, "
@@ -1138,7 +1193,7 @@ class DarlStageParameters:
         calibrated = {"camera"}
         if self.calibration_result.line_sensor is not None:
             calibrated.add("line_sensor")
-        if calibrated != expected:
+        if calibrated != expected - {"side"}:
             raise ParametersError(
                 "calibration/result.yaml: набор результатов детекторов должен "
                 f"совпадать с general.yaml; ожидалось {sorted(expected)}, "
@@ -1185,7 +1240,7 @@ class ExperimentParameters:
             for name in ("camera", "line_sensor")
             if getattr(self.calibration, name) is not None
         )
-        if calibration != expected:
+        if calibration != expected - {"side"}:
             raise ParametersError(
                 "calibration.yaml: набор секций детекторов должен совпадать "
                 f"с general.yaml; ожидалось {sorted(expected)}, "
@@ -1201,6 +1256,8 @@ class ExperimentParameters:
 
     def load_restore_profile(self, profile: RestoreProfile) -> RestoreParameters:
         result = load_restore_parameters(profile.path)
+        if "side" in (result.detectors.names() | self.general.detectors.names()) and result.detectors.names() != self.general.detectors.names():
+            raise ParametersError(f"{profile.path.name}: при side необходимы camera, line_sensor и side во всех профилях")
         extra = result.detectors.names() - self.general.detectors.names()
         if extra:
             raise ParametersError(
@@ -1297,3 +1354,38 @@ def write_used_parameters(path: str | Path, parameters: Any) -> None:
                 f"{destination}"
             ) from error
         raise ParametersError(str(error)) from error
+
+
+def _validate_side_files(source: Path, detectors: ExperimentDetectors) -> None:
+    """Side usage is an experiment-wide contract, including unselected profiles."""
+    paths = [source.parent / "darl.yaml", *sorted((source.parent / "restore_profiles").glob("*.yaml"))]
+    files = []
+    errors = []
+    for path in paths:
+        if path.is_file():
+            try:
+                files.append((path, _load_yaml(path)))
+            except ParametersError as error:
+                errors.append(error)
+                if detectors.side is not None:
+                    raise
+                # Independent calibration need not parse unrelated stage inputs.
+                continue
+    side_requested = detectors.side is not None or any(
+        isinstance(data.get("detectors"), dict) and "side" in data["detectors"]
+        for _, data in files
+    )
+    if not side_requested:
+        return
+    if errors:
+        raise errors[0]
+    required = {"camera", "line_sensor", "side"}
+    if detectors.names() != required:
+        raise ParametersError(f"{source}: side требует camera, line_sensor и side во всех файлах")
+    if not paths[0].is_file():
+        raise ParametersError(f"{paths[0]}: при side обязателен darl.yaml")
+    for path, data in files:
+        entries = data.get("detectors")
+        if not isinstance(entries, dict) or set(entries) != required:
+            raise ParametersError(f"{path}: при side обязательны camera, line_sensor и side")
+        _fields(entries["side"], f"{path}.detectors.side")

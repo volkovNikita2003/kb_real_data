@@ -100,6 +100,10 @@ class ExperimentConfig:
     lin_signal_mode: int = 2
 
 
+    # боковые детекторы
+    side_angle_deg: tuple[float, ...] = ()
+    side_signal_file: Path | None = None
+
     # darl
     darl_config_name: str = None
     path_signal_darl_rel: str = None

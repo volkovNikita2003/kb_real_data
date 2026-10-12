@@ -50,6 +50,14 @@ class Measurement:
         return self.path / "lin_back"
 
     @property
+    def side_dir(self) -> Path:
+        return self.path / "side"
+
+    @property
+    def side_signal_file(self) -> Path:
+        return self.side_dir / "b.txt"
+
+    @property
     def signal_vector_file(self) -> Path:
         return self.path / "b.txt"
 
@@ -157,6 +165,10 @@ class Experiment:
         return self.calibration_dir / "lin"
 
     @property
+    def side_comsol_file(self) -> Path:
+        return self.data_dir / "comsol.txt"
+
+    @property
     def general_parameters_file(self) -> Path:
         return self.input_parameters_dir / "general.yaml"
 
@@ -220,6 +232,10 @@ class Experiment:
         """Return all measurement directories except ``calibration``."""
         measurements: list[Measurement] = []
         for entry in sorted(self.data_dir.iterdir(), key=lambda item: item.name):
+            if entry.name == "comsol.txt":
+                if not entry.is_file():
+                    raise ExperimentStructureError(f"COMSOL должен быть обычным файлом: {entry}")
+                continue
             if entry.name == "calibration":
                 continue
             if not entry.is_dir():
@@ -234,7 +250,7 @@ class Experiment:
         """Return one existing measurement by name."""
         validate_safe_name(name, kind="измерения")
         path = self.data_dir / name
-        if name == "calibration" or not path.is_dir():
+        if name in {"calibration", "comsol.txt"} or not path.is_dir():
             raise ExperimentStructureError(
                 f"Измерение {name!r} не найдено в эксперименте {self.name!r}"
             )

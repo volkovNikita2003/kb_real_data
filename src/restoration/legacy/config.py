@@ -107,6 +107,8 @@ def build_legacy_restore_config(
             "Legacy-восстановление пока поддерживает только профили с камерой"
         )
     general_detectors = general.detectors.names()
+    if "side" in (restore_detectors | general_detectors) and restore_detectors != general_detectors:
+        raise LegacyRestoreConfigError("При side необходимы camera, line_sensor и side")
     missing_general = restore_detectors - general_detectors
     if missing_general:
         raise LegacyRestoreConfigError(
@@ -223,6 +225,8 @@ def build_legacy_restore_config(
         cut_classes_top=restore.class_slice.drop_last,
     )
 
+    cfg.side_angle_deg = general.detectors.side.angle_deg if restore.detectors.side is not None else ()
+    cfg.side_signal_file = measurement.side_signal_file if cfg.side_angle_deg else None
     run_mode: Literal["camera", "camera_line"] = "camera"
     line_restore = restore.detectors.line_sensor
     if line_restore is not None:

@@ -23,7 +23,7 @@ class ForwardOperatorError(RestorationError):
 
 
 _VALIDATOR = SchemaValidator(ForwardOperatorError)
-_DETECTORS = ("camera", "line_sensor")
+_DETECTORS = ("camera", "line_sensor", "side")
 
 
 @dataclass(frozen=True)
@@ -108,6 +108,7 @@ def from_darl(experiment: Experiment, result: DarlResult) -> ForwardOperator:
     expected_names = {
         "camera": "bins_front_detector.txt",
         "line_sensor": "FrontDetectorLogLine_detector.txt",
+        "side": "side_detector_angles.txt",
     }
     available = set(result.detector_bin_files)
     for detector in result.detectors:
@@ -173,10 +174,12 @@ def from_manifest(experiment: Experiment, manifest: str) -> ForwardOperator:
     if not isinstance(raw_detectors, list) or not raw_detectors:
         raise ForwardOperatorError("detectors: ожидался непустой список")
     if any(item not in _DETECTORS for item in raw_detectors):
-        raise ForwardOperatorError("detectors: допустимы camera и line_sensor")
+        raise ForwardOperatorError("detectors: допустимы camera, line_sensor и side")
     if len(raw_detectors) != len(set(raw_detectors)):
         raise ForwardOperatorError("detectors: имена не должны повторяться")
     detectors = tuple(item for item in _DETECTORS if item in raw_detectors)
+    if "side" in detectors and not {"camera", "line_sensor"} <= set(detectors):
+        raise ForwardOperatorError("side требует camera и line_sensor")
 
     signal = _VALIDATOR.fields(
         root["signal"], "signal", required={"value_type"}

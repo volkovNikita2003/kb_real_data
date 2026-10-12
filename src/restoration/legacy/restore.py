@@ -18,6 +18,7 @@ from calibration.legacy.func import (
     print_cam_pix_valid_per_bin,
     get_laser_center_pos_pix,
 )
+from side import load_side_signal
 from restoration.legacy.config import (
     LegacyRestoreConfigArtifact,
     LegacyRestoreConfigError,
@@ -194,9 +195,10 @@ def run_cfg(cfg:ExperimentConfig):
     A = np.load(cfg.file_matrix)["matrix"].astype(np.float64)
     classes = read_classes(cfg.file_classes)
 
-    if len(bins_cam) + len(bins_lin) != A.shape[0]:
+    side_count = len(getattr(cfg, "side_angle_deg", ()))
+    if len(bins_cam) + len(bins_lin) + side_count != A.shape[0]:
         raise ValueError(
-            "Число бинов камеры и линейки не равно числу строк аппаратной матрицы"
+            "Число бинов камеры, линейки и боковых детекторов не равно числу строк аппаратной матрицы"
         )
 
     cut_classes = cfg.cut_classes
@@ -277,7 +279,7 @@ def run_cfg(cfg:ExperimentConfig):
     for exposure_time_us_lin in cfg.exposure_time_us_lin_arr:
         print(f"\nexposure_time_us_lin={exposure_time_us_lin}")
         if file_signal is not None:
-            b_lin_norm = file_signal[len(bins_cam):]
+            b_lin_norm = file_signal[len(bins_cam):len(bins_cam) + len(bins_lin)]
             b_lin = b_lin_norm
             b = file_signal
         else:
@@ -300,7 +302,28 @@ def run_cfg(cfg:ExperimentConfig):
             )
 
             b_lin_norm = b_lin/(exposure_time_us_lin+cfg.lin_time_add)*cfg.coef_lin_to_cam
-            b = np.hstack((b_cam_norm, b_lin_norm))
+            b_side = load_side_signal(cfg.side_signal_file, side_count) if side_count else np.array([])
+            b = np.hstack((b_cam_norm, b_lin_norm, b_side))
+        if side_count:
+            b_side = b[-side_count:]
+            np.savetxt(
+                cfg.dir_save / "reference_side_signal.txt",
+                np.column_stack((b_side, b_side)),
+                delimiter="\t",
+                header="raw\tnormalized",
+                comments="",
+                fmt="%.17g",
+            )
+            plt.figure(figsize=(10, 5))
+            plt.plot(b_side, marker="o")
+            plt.xlabel("№ бокового детектора")
+            plt.ylabel("Суммарный сигнал")
+            plt.grid()
+            plt.tight_layout()
+            plt.savefig(
+                cfg.dir_save / f"signal-side.png"
+            )
+            plt.close()
         b_real_norm = b / np.max(b)
 
         data_signal = [(b_real_norm, "real_norm")]
@@ -667,6 +690,8 @@ def run_cfg(cfg:ExperimentConfig):
 
 
 def run_cfg_lin_cut(cfg:ExperimentConfig):
+    if getattr(cfg, "side_angle_deg", ()):
+        raise ValueError("run_cfg_lin_cut недоступна при использовании боковых детекторов")
     exposure_time = np.max(cfg.exposure_time_arr)
     cfg.dir_save.mkdir(exist_ok=True, parents=True)
     cfg.save_params()

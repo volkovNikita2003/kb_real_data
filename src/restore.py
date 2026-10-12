@@ -127,6 +127,8 @@ def _measurement_inputs(
             ),
             "exposure_us": line_exposure,
         }
+    if restore.detectors.side is not None:
+        result["side"] = {"signal_vector_file": measurement.side_signal_file.relative_to(experiment.path).as_posix()}
     return result, camera_exposures, line_exposure
 
 

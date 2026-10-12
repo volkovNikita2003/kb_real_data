@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -103,6 +104,12 @@ def run(
         (directory / "legacy-config.txt").write_text(
             config.text, encoding="utf-8"
         )
+        if parameters.general.detectors.side is not None:
+            shutil.copy2(experiment.side_comsol_file, code_git / "side_detectors_angles-distance_0cm.txt")
+            (directory / "side_detector_angles.txt").write_text(
+                "".join(f"{angle:.17g}\n" for angle in parameters.general.detectors.side.angle_deg),
+                encoding="utf-8",
+            )
         completed = subprocess.run(
             [sys.executable, "-m", "darl.legacy.calc_darl"],
             env=_legacy_environment(

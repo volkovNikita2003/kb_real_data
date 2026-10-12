@@ -23,6 +23,7 @@ _VALIDATOR = SchemaValidator(DarlResultError)
 _DETECTOR_FILES = {
     "camera": "bins_front_detector.txt",
     "line_sensor": "FrontDetectorLogLine_detector.txt",
+    "side": "side_detector_angles.txt",
 }
 _DETECTOR_ORDER = tuple(_DETECTOR_FILES)
 _SIGNAL_VALUE_TYPES = frozenset({"signal", "intensity"})
@@ -84,6 +85,8 @@ def _detector_contract(
             "detectors: должен быть указан хотя бы один детектор"
         )
     detectors_set = set(detectors_input)
+    if "side" in detectors_set and not {"camera", "line_sensor"} <= detectors_set:
+        raise DarlResultError("side требует camera и line_sensor")
     if len(detectors_input) != len(detectors_set):
         raise DarlResultError("detectors: имена не должны повторяться")
     unknown_detectors = detectors_set - _DETECTOR_FILES.keys()
@@ -151,6 +154,7 @@ def collect_darl_result(
         if path.is_file() and (
             path.name.startswith("bins_")
             or path.name.endswith("_detector.txt")
+            or path.name == "side_detector_angles.txt"
         )
     }
     detectors, bin_files = _detector_contract(

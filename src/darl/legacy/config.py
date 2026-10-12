@@ -172,6 +172,16 @@ def render_legacy_config(parameters: DarlStageParameters) -> str:
         f"Частота_классов: {_number(quality.class_frequency)}",
         "",
     ]
+    side = general.detectors.side
+    if side is not None:
+        lines.extend([
+            "Задние_датчики:",
+            "Включены: да",
+            "Положение_детекторов_(углы_в_градусах): " + ", ".join(_number(angle) for angle in side.angle_deg),
+            f"линейный_размер_(мм): {_number(side.pixel_width_m * 1000)}",
+            "расстояние_до_кюветы_(см): 0",
+            "",
+        ])
     return "\n".join(lines)
 
 

@@ -53,3 +53,8 @@ ref
 *.temp
 tmp/
 temp/
+
+# testing_data
+fixtures/**
+!fixtures/**/
+!fixtures/**/README.md

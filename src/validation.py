@@ -22,6 +22,7 @@ from parameters import (
     load_measurement_parameters,
 )
 from restoration.operator import ForwardOperator, from_darl
+from side import load_side_signal
 
 
 EXPOSURE_PATTERN = re.compile(r"^[1-9][0-9]*$", re.ASCII)
@@ -29,7 +30,7 @@ ALLOWED_INPUT_PARAMETER_ENTRIES = frozenset(
     {"general.yaml", "calibration.yaml", "darl.yaml", "measurements", "restore_profiles"}
 )
 ALLOWED_CALIBRATION_DIRECTORIES = frozenset({"cam", "lin"})
-ALLOWED_MEASUREMENT_DIRECTORIES = frozenset({"cam", "cam_back", "lin", "lin_back"})
+ALLOWED_MEASUREMENT_DIRECTORIES = frozenset({"cam", "cam_back", "lin", "lin_back", "side"})
 ALLOWED_MEASUREMENT_FILES = frozenset({"b.txt"})
 Severity = Literal["error", "warning"]
 
@@ -366,6 +367,10 @@ def _validate_measurement_base(
             )
 
     detectors = frozenset(detector_names)
+    if measurement.side_dir.is_dir():
+        for entry in measurement.side_dir.iterdir():
+            if entry.name not in {"b.txt"} or not entry.is_file():
+                report.add("error", "unknown_side_entry", "В side разрешён только файл b.txt", path=entry, measurement=measurement.name, restore_profile=restore_profile)
     if measurement.signal_vector_file.is_file():
         try:
             vector = np.asarray(
@@ -595,6 +600,12 @@ def validate_experiment(
     report = _ReportBuilder()
     _validate_parameter_layout(experiment, report)
     _validate_calibration(experiment, parameters, report)
+    if parameters.general.detectors.side is not None and not experiment.side_comsol_file.is_file():
+        report.add(
+            "error", "missing_side_comsol",
+            "Не найден data/comsol.txt для боковых детекторов",
+            path=experiment.side_comsol_file,
+        )
 
     available_measurements = experiment.measurement_names()
     selected_measurements = _select_names(
@@ -643,6 +654,11 @@ def validate_experiment(
         data = _validate_measurement_base(
             measurement, parameters.general.detectors.names(), report
         )
+        if parameters.general.detectors.side is not None and not measurement.signal_vector_file.is_file():
+            try:
+                load_side_signal(measurement.side_signal_file, len(parameters.general.detectors.side.angle_deg))
+            except (OSError, ValueError) as error:
+                report.add("error", "invalid_side_signal", str(error), path=measurement.side_signal_file, measurement=name)
         for profile_name, restore in loaded_profiles.items():
             profile = profile_by_name[profile_name]
             _validate_camera_pair(data, profile, restore, report)
@@ -670,6 +686,9 @@ def validate_darl_inputs(
     """Validate only inputs consumed by an independent legacy DARL run."""
     report = _ReportBuilder()
     _validate_parameter_layout(experiment, report)
+
+    if parameters.general.detectors.side is not None and not experiment.side_comsol_file.is_file():
+        report.add("error", "missing_side_comsol", "Не найден data/comsol.txt для боковых детекторов", path=experiment.side_comsol_file)
 
     configured_measurements = {
         distribution.name
@@ -761,6 +780,13 @@ def validate_restore_inputs(
         )
 
     general_detectors = general.detectors.names()
+    if "side" in (detectors | general_detectors) and detectors != general_detectors:
+        report.add("error", "inconsistent_side_detectors", "При side необходимы camera, line_sensor и side во всех профилях", path=profile.path, **context)
+    if "side" in detectors and general.detectors.side is not None and not measurement.signal_vector_file.is_file():
+        try:
+            load_side_signal(measurement.side_signal_file, len(general.detectors.side.angle_deg))
+        except (OSError, ValueError) as error:
+            report.add("error", "invalid_side_signal", str(error), path=measurement.side_signal_file, **context)
     missing_general = detectors - general_detectors
     if missing_general:
         report.add(
@@ -773,7 +799,7 @@ def validate_restore_inputs(
     calibrated = {"camera"}
     if calibration.line_sensor is not None:
         calibrated.add("line_sensor")
-    missing_calibration = detectors - calibrated
+    missing_calibration = detectors - calibrated - {"side"}
     if missing_calibration:
         report.add(
             "error", "restore_detector_missing_in_calibration",
@@ -817,7 +843,7 @@ def validate_restore_inputs(
                 path=path or (operator.manifest_file or profile.path), **context,
             )
 
-    if operator.source == "file" and all(
+    if (operator.source == "file" or "side" in detectors) and all(
         path.is_file()
         for path in (
             operator.matrix_file,
@@ -847,6 +873,8 @@ def validate_restore_inputs(
                 ]
                 if detector == "line_sensor" and lines:
                     lines = lines[1:]
+                if detector == "side" and general.detectors.side is not None and len(lines) != len(general.detectors.side.angle_deg):
+                    raise ValueError("Число боковых детекторов оператора не равно числу angle_deg")
                 bin_count += len(lines)
             if matrix.shape[1] != class_count:
                 raise ValueError(

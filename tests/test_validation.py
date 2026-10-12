@@ -151,7 +151,7 @@ class DarlValidationTests(unittest.TestCase):
             experiment = Experiment.open(create_experiment(root))
             code_git = root / "code_git"
             (code_git / "data/configs").mkdir(parents=True)
-            parameters = SimpleNamespace(distributions=(
+            parameters = SimpleNamespace(general=SimpleNamespace(detectors=SimpleNamespace(side=None)), distributions=(
                 SimpleNamespace(
                     name="pinhole_200", source="built_in_quality_control"
                 ),
@@ -184,7 +184,7 @@ class DarlValidationTests(unittest.TestCase):
             experiment = Experiment.open(path)
             code_git = root / "code_git"
             (code_git / "data/configs").mkdir(parents=True)
-            parameters = SimpleNamespace(distributions=(
+            parameters = SimpleNamespace(general=SimpleNamespace(detectors=SimpleNamespace(side=None)), distributions=(
                 SimpleNamespace(name="sample", source="measurement"),
             ))
 
@@ -197,7 +197,7 @@ class DarlValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             experiment = Experiment.open(create_experiment(root))
-            parameters = SimpleNamespace(distributions=())
+            parameters = SimpleNamespace(general=SimpleNamespace(detectors=SimpleNamespace(side=None)), distributions=())
             report = validate_darl_inputs(
                 experiment, parameters, code_git_dir=root / "missing"
             )

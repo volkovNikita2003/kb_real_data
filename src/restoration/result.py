@@ -14,7 +14,7 @@ from yaml_support import YamlError, dump_yaml, load_yaml
 
 
 RESULT_SCHEMA_VERSION = 1
-_DETECTOR_ORDER = ("camera", "line_sensor")
+_DETECTOR_ORDER = ("camera", "line_sensor", "side")
 _DETECTORS = frozenset(_DETECTOR_ORDER)
 
 
@@ -30,6 +30,7 @@ class RestoreSignalFiles:
     camera: str
     line_sensor: str | None = None
     combined: str | None = None
+    side: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,8 @@ class RestoreResult:
         signals: dict[str, str] = {"camera": self.signals.camera}
         if self.signals.line_sensor is not None:
             signals["line_sensor"] = self.signals.line_sensor
+        if self.signals.side is not None:
+            signals["side"] = self.signals.side
         if self.signals.combined is not None:
             signals["combined"] = self.signals.combined
 
@@ -107,6 +110,8 @@ def _detectors(values: Iterable[str]) -> tuple[str, ...]:
         raise RestoreResultError(
             "detectors: legacy-восстановление требует камеру"
         )
+    if "side" in items and "line_sensor" not in items:
+        raise RestoreResultError("side требует camera и line_sensor")
     return tuple(name for name in _DETECTOR_ORDER if name in items)
 
 
@@ -226,6 +231,7 @@ def collect_restore_result(
         camera=camera_signal,
         line_sensor=line_signal,
         combined=combined_signal,
+        side=_one_matching_file(root, "reference_side_signal.txt", location="signals.side", required="side" in detectors),
     )
     solution = _solution_files(root, prefix="", location="solution")
     sliced_solution = None
@@ -348,7 +354,7 @@ def load_restore_result(path: str | Path) -> RestoreResult:
         fields["signals"],
         "signals",
         required={"camera"},
-        optional={"line_sensor", "combined"},
+        optional={"line_sensor", "combined", "side"},
     )
     uses_line = "line_sensor" in detectors
     has_line_fields = {
@@ -362,7 +368,10 @@ def load_restore_result(path: str | Path) -> RestoreResult:
             "signals: line_sensor и combined должны точно соответствовать "
             "включённой линейке"
         )
+    if ("side" in detectors) != ("side" in signal_fields):
+        raise RestoreResultError("signals.side должен соответствовать включённым боковым детекторам")
     signals = RestoreSignalFiles(
+        side=_relative_path(signal_fields["side"], "signals.side") if "side" in detectors else None,
         camera=_relative_path(signal_fields["camera"], "signals.camera"),
         line_sensor=(
             _relative_path(signal_fields["line_sensor"], "signals.line_sensor")
@@ -423,6 +432,8 @@ def load_restore_result(path: str | Path) -> RestoreResult:
     }
     if signals.line_sensor is not None:
         essential_paths.add(signals.line_sensor)
+    if signals.side is not None:
+        essential_paths.add(signals.side)
     if signals.combined is not None:
         essential_paths.add(signals.combined)
     if sliced is not None:
